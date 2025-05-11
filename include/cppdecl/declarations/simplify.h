@@ -29,6 +29,10 @@ namespace cppdecl
         //   and having the allocator after this one will prevent it from being removed.
         bit_common_remove_char_traits = 1 << 4,
 
+        #error test that `const std::vector` simplifies correctly
+        #error port the rest of the simplification passes. We need, in this order: removing std::equal_to<T>, std::hash<T>, simplifying basic_string to string and such.
+        #error also change the C generator std_string struct to store two pointers instead of a pointer and a size, I guess?
+
         common = bit_common_remove_allocator,
 
 
