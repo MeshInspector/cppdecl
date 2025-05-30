@@ -632,6 +632,197 @@ namespace cppdecl
     }
 
 
+    using ParseNumberTokenResult = std::variant<NumberToken, ParseError>;
+
+    [[nodiscard]] CPPDECL_CONSTEXPR ParseNumberTokenResult ParseNumberToken(std::string_view &input)
+    {
+        TrimLeadingWhitespace(input);
+        const std::string_view input_before_parse = input;
+
+        ParseNumberTokenResult ret;
+        NumberToken &ret_token = std::get<NumberToken>(ret);
+        NumberToken::Integer *ret_int = &std::get<NumberToken::Integer>(ret_token.var);
+        NumberToken::FloatingPoint *ret_float = nullptr;
+
+        bool allow_apostrophe = false;
+        bool (*validation_func)(char) = IsDigit;
+
+        if (ConsumePunctuation(input, "0x") || ConsumePunctuation(input, "0X"))
+        {
+            ret_int->kind = NumberToken::Integer::Kind::hex;
+            validation_func = IsHexDigit;
+        }
+        else if (ConsumePunctuation(input, "0b") || ConsumePunctuation(input, "0B"))
+        {
+            ret_int->kind = NumberToken::Integer::Kind::binary;
+            validation_func = IsBinDigit;
+        }
+        else if (ConsumePunctuation(input, "0"))
+        {
+            ret_int->kind = NumberToken::Integer::Kind::octal;
+            validation_func = IsOctalDigit;
+            allow_apostrophe = true;
+        }
+
+        // Consume the integral part, if any.
+        while (!input.empty())
+        {
+            char ch = input.front();
+
+            if (validation_func(ch) || (ch == '\'' && allow_apostrophe))
+            {
+                ret_int->value += ch;
+                input.remove_prefix(1);
+                allow_apostrophe = true;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        const bool is_hex = ret_int->kind == NumberToken::Integer::Kind::hex;
+
+        auto ConvertToFloatingPoint = [&]() -> ParseError
+        {
+            if (ret_float)
+                return {}; // Already floating-point.
+
+            // Complain if this is not a decimal or hex literal.
+            if (ret_int->kind != NumberToken::Integer::Kind::decimal && ret_int->kind != NumberToken::Integer::Kind::hex)
+            {
+                return ParseError{.message = ret_int->kind == NumberToken::Integer::Kind::binary ? "Binary literals can't be fractional." : "Octal literals can't be fractional."};
+            }
+
+            // Convert to a floating-point literal.
+            NumberToken::FloatingPoint new_float; // Need a temporary variable to move the contents over from the integer literal.
+            new_float.value_int = std::move(ret_int->value);
+            new_float.kind = is_hex ? NumberToken::FloatingPoint::Kind::hex : NumberToken::FloatingPoint::Kind::decimal;
+            ret_float = &ret_token.var.emplace<NumberToken::FloatingPoint>(std::move(new_float));
+            ret_int = nullptr;
+
+            return {};
+        };
+
+        // The fractional part, if any.
+        const std::string_view input_before_frac = input;
+        if (ConsumePunctuation(input, "."))
+        {
+            // Convert to a floating-point literal.
+            if (ParseError error = ConvertToFloatingPoint(); error.message)
+            {
+                input = input_before_frac;
+                return ret = error, ret;
+            }
+
+            // Consume the fractional part.
+            allow_apostrophe = false;
+            while (!input.empty())
+            {
+                char ch = input.front();
+                if (validation_func(ch) || (ch == '\'' && allow_apostrophe))
+                {
+                    ret_float->value_frac += ch;
+                    input.remove_prefix(1);
+                    allow_apostrophe = true;
+                }
+            }
+
+            if (ret_float->value_int.empty() && ret_float->value_frac.empty())
+                return ret = ParseError{.message = "In a floating-point literal, expected at least one digit before or after the decimal point."}, ret;
+        }
+
+        // Consume the exponent, if any.
+        if (ConsumePunctuation(input, is_hex ? "p" : "e") || ConsumePunctuation(input, is_hex ? "P" : "E"))
+        {
+            // Convert to a floating-point literal.
+            if (ParseError error = ConvertToFloatingPoint(); error.message)
+            {
+                input = input_before_frac;
+                return ret = error, ret;
+            }
+
+            if (ConsumePunctuation(input, "+"))
+                ret_float->value_exp = "+";
+            else if (ConsumePunctuation(input, "-"))
+                ret_float->value_exp = "-";
+
+            allow_apostrophe = false;
+            while (!input.empty())
+            {
+                char ch = input.front();
+                if (IsDigit(ch) || (ch == '\'' && allow_apostrophe)) // Those are always decimal, so no `validation_func` here.
+                {
+                    ret_float->value_exp += ch;
+                    input.remove_prefix(1);
+                    allow_apostrophe = true;
+                }
+            }
+
+            if (!allow_apostrophe)
+                return ret = ParseError{.message = "Expected the exponent."}, ret;
+        }
+
+        // Consume the suffix, if any.
+        if (ret_float)
+        {
+            // A floating-point suffix.
+
+            std::string &suffix_str = std::get<std::string>(ret_float->suffix);
+            while (!input.empty() && IsIdentifierChar(input.front()))
+            {
+                input.remove_prefix(1);
+                suffix_str += input.front();
+            }
+
+            // Decode the suffix if possible
+            if      (suffix_str == "f" || suffix_str == "F") ret_float->suffix = NumberToken::FloatingPoint::Suffix::f;
+            else if (suffix_str == "l" || suffix_str == "L") ret_float->suffix = NumberToken::FloatingPoint::Suffix::l;
+            else if (suffix_str == "f16" || suffix_str == "F16") ret_float->suffix = NumberToken::FloatingPoint::Suffix::f16;
+            else if (suffix_str == "f32" || suffix_str == "F32") ret_float->suffix = NumberToken::FloatingPoint::Suffix::f32;
+            else if (suffix_str == "f64" || suffix_str == "F64") ret_float->suffix = NumberToken::FloatingPoint::Suffix::f64;
+            else if (suffix_str == "f128" || suffix_str == "F128") ret_float->suffix = NumberToken::FloatingPoint::Suffix::f128;    else if (suffix_str == "bf16" || suffix_str == "BF16") ret_float->suffix = NumberToken::FloatingPoint::Suffix::bf16;
+
+        }
+        else
+        {
+            // An integral suffix.
+
+            std::string &suffix_str = std::get<std::string>(ret_int->suffix);
+            while (!input.empty() && IsIdentifierChar(input.front()))
+            {
+                input.remove_prefix(1);
+                suffix_str += input.front();
+            }
+
+            // Decode the suffix if possible.
+            NumberToken::Integer::Suffix new_suffix;
+            std::string_view suffix_view = suffix_str;
+            if (
+                ConsumePunctuation(suffix_view, "u") || ConsumeTrailingPunctuation(suffix_view, "u") ||
+                ConsumePunctuation(suffix_view, "U") || ConsumeTrailingPunctuation(suffix_view, "U")
+            )
+            {
+                new_suffix.is_unsigned = true;
+            }
+
+            bool ok = true;
+            if      (suffix_view == "l"  || suffix_view == "L" ) new_suffix.signed_part = NumberToken::Integer::SignedSuffix::l;
+            else if (suffix_view == "ll" || suffix_view == "LL") new_suffix.signed_part = NumberToken::Integer::SignedSuffix::ll;
+            else if (suffix_view == "z"  || suffix_view == "Z" ) new_suffix.signed_part = NumberToken::Integer::SignedSuffix::z;
+            else
+            {
+                ok = false;
+            }
+
+            // If the suffix decoded successfully, replace the string with the result of decoding.
+            if (ok)
+                ret_int->suffix = std::move(new_suffix);
+        }
+
+        return ret;
+    }
+
     enum class ParsePseudoExprFlags
     {
         // Stop parsing on `>`. Good for template argument lists.

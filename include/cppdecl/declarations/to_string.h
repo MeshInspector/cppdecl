@@ -35,6 +35,20 @@ namespace cppdecl
 
         // Do `int* x` instead of `int *x`.
         left_align_pointer = no_space_before_pointer | add_space_after_pointer,
+
+        // `0X` instead of `0x`.
+        numeric_literals_uppercase_prefix = 1 << 4,
+        // 0xABC` instead of `0xabc.
+        numeric_literals_uppercase_digits = 1 << 5,
+        // `1E2` instead of `1e2`.
+        numeric_literals_uppercase_exponent = 1 << 6,
+        // `1U` instead of `1u`.
+        numeric_literals_uppercase_suffix = 1 << 7,
+        // Use caps for everything in numeric literals.
+        numeric_literals_uppercase = numeric_literals_uppercase_prefix | numeric_literals_uppercase_digits | numeric_literals_uppercase_exponent | numeric_literals_uppercase_suffix,
+
+        // `1lu` instead of `1ul`.
+        numeric_literals_suffix_unsigned_last = 1 << 8,
         // ] End style flags.
 
 
@@ -42,24 +56,40 @@ namespace cppdecl
 
         // Refuse to print trailing return types, convert them to the normal spelling.
         // This is good for making C++-style declarations usable in C.
-        force_no_trailing_return_type = 1 << 4,
+        force_no_trailing_return_type = 1 << 9,
 
         // Force print `foo(int...)` as `foo(int, ...)`. The two are equivalent, and the former
-        force_comma_before_c_style_variadic = 1 << 5,
+        force_comma_before_c_style_variadic = 1 << 10,
 
         // Don't spell `signed` except in `signed char`.
-        force_no_redundant_signed = 1 << 6,
+        force_no_redundant_signed = 1 << 11,
 
         // Don't spell elaborated type specifiers and `typename`.
-        force_no_type_prefix = 1 << 7,
+        force_no_type_prefix = 1 << 12,
+
+        // Remove any `'`s from the literals.
+        numeric_literals_strip_apostrophes = 1 << 13,
+
+        // Force `1e2` instead of `1e+2`.
+        numeric_literals_remove_exponent_plus_sign = 1 << 14,
+        // Force `1e+2` instead of `1e2`.
+        numeric_literals_force_exponent_plus_sign = 1 << 15,
 
         // Partially canonicalize. Better use `canonical_c_style` or `canonical_cpp_style` to canonicalize fully.
-        weakly_canonical_language_agnostic = force_no_trailing_return_type | force_comma_before_c_style_variadic | force_no_redundant_signed | force_no_type_prefix,
+        weakly_canonical_language_agnostic =
+            force_no_trailing_return_type |
+            force_comma_before_c_style_variadic |
+            force_no_redundant_signed |
+            force_no_type_prefix |
+            numeric_literals_strip_apostrophes |
+            numeric_literals_remove_exponent_plus_sign |
+            numeric_literals_force_exponent_plus_sign,
 
         // Force `(void)` for empty parameters.
-        force_c_style_empty_params = 1 << 8,
+        force_c_style_empty_params = 1 << 16,
         // Force `()` for empty parameters. Those two flags are incompatible.
-        force_cpp_style_empty_params = 1 << 9,
+        force_cpp_style_empty_params = 1 << 17,
+
 
         // Canonicalize the type for C. (Which works in C++ too.)
         canonical_c_style = weakly_canonical_language_agnostic | force_c_style_empty_params,
@@ -73,8 +103,8 @@ namespace cppdecl
 
         // This is only for `Type`s. For other things this will result in an unpredictable behavior.
         // Causes only a half of the type to be emitted, either the left half or the right half. The identifier if any goes between them.
-        only_left_half_type = 1 << 10,
-        only_right_half_type = 1 << 11,
+        only_left_half_type = 1 << 18,
+        only_right_half_type = 1 << 19,
 
         // You shouldn't pass this, but you can use this to test any of the two bits above.
         mask_any_half_type = only_left_half_type | only_right_half_type,
@@ -998,7 +1028,104 @@ namespace cppdecl
     {
         assert(!bool(flags & ToCodeFlags::mask_any_half_type));
 
-        return target.value;
+        std::string ret;
+
+        auto AppendInteger = [&](std::string_view input)
+        {
+            if (bool(flags & ToCodeFlags::numeric_literals_strip_apostrophes))
+            {
+                for (char ch : input)
+                {
+                    if (ch != '\'')
+                        ret += ch;
+                }
+            }
+            else
+            {
+                ret += input;
+            }
+        };
+
+        std::visit(Overload{
+            [&](const NumberToken::Integer &i)
+            {
+                switch (i.kind)
+                {
+                    case NumberToken::Integer::Kind::decimal: break; // Nothing.
+                    case NumberToken::Integer::Kind::binary:  ret += bool(flags & ToCodeFlags::numeric_literals_uppercase_prefix) ? "0B" : "0b"; break;
+                    case NumberToken::Integer::Kind::octal:   ret += '0';
+                    case NumberToken::Integer::Kind::hex:     ret += bool(flags & ToCodeFlags::numeric_literals_uppercase_prefix) ? "0X" : "0x"; break;
+                }
+
+                AppendInteger(i.value);
+
+                std::visit(Overload{
+                    [&](std::string_view str)
+                    {
+                        ret += str;
+                    },
+                    [&](const NumberToken::Integer::Suffix &suffix)
+                    {
+                        const bool trailing_unsigned = bool(flags & ToCodeFlags::numeric_literals_suffix_unsigned_last);
+                        const bool caps = bool(flags & ToCodeFlags::numeric_literals_uppercase_suffix);
+                        if (!trailing_unsigned)
+                            ret += caps ? 'U' : 'u';
+
+                        switch (suffix.signed_part)
+                        {
+                            case NumberToken::Integer::SignedSuffix::l:  ret += caps ? "L"  : "l";  break;
+                            case NumberToken::Integer::SignedSuffix::ll: ret += caps ? "LL" : "ll"; break;
+                            case NumberToken::Integer::SignedSuffix::z:  ret += caps ? "Z"  : "z";  break;
+                        }
+
+                        if (trailing_unsigned)
+                            ret += caps ? 'U' : 'u';
+                    },
+                }, i.suffix);
+            },
+            [&](const NumberToken::FloatingPoint &f)
+            {
+                switch (f.kind)
+                {
+                    case NumberToken::FloatingPoint::Kind::decimal: break; // Nothing.
+                    case NumberToken::FloatingPoint::Kind::hex: ret += bool(flags & ToCodeFlags::numeric_literals_uppercase_prefix) ? "0X" : "0x"; break;
+                }
+
+                // Integral part.
+                AppendInteger(f.value_int);
+
+                // Fractional part.
+                // If there's none, we can omit the decimal point only if there is exponent.
+                if (!f.value_frac.empty() || f.value_exp.empty())
+                {
+                    ret += '.';
+                    AppendInteger(f.value_frac);
+                }
+
+                // Exponent.
+                if (!f.value_exp.empty())
+                {
+                    switch (f.kind)
+                    {
+                        case NumberToken::FloatingPoint::Kind::decimal: ret += bool(flags & ToCodeFlags::numeric_literals_uppercase_exponent) ? 'E' : 'e'; break;
+                        case NumberToken::FloatingPoint::Kind::hex:     ret += bool(flags & ToCodeFlags::numeric_literals_uppercase_exponent) ? 'P' : 'p'; break;
+                    }
+
+                    // Make sure we don't have conflicting exponent canonicalizaiton flags.
+                    assert(bool(flags & ToCodeFlags::numeric_literals_force_exponent_plus_sign) + bool(flags & ToCodeFlags::numeric_literals_remove_exponent_plus_sign) <= 1);
+
+                    std::string_view exp_view = f.value_exp;
+                    if (bool(flags & ToCodeFlags::numeric_literals_remove_exponent_plus_sign) && f.value_exp.starts_with('+'))
+                        exp_view.remove_prefix(1);
+                    else if (bool(flags & ToCodeFlags::numeric_literals_remove_exponent_plus_sign) && f.value_exp.starts_with('+') && f.value_exp.starts_with('-'))
+                        ret += '+';
+
+                    ret += exp_view;
+                }
+            },
+        }, target.var);
+
+        return ret;
     }
 
     [[nodiscard]] CPPDECL_CONSTEXPR std::string ToString(const NumberToken &target, ToStringFlags flags)

@@ -543,9 +543,69 @@ namespace cppdecl
     // Some token that looks like a number.
     struct NumberToken
     {
-        std::string value;
+        struct Integer
+        {
+            enum class Kind
+            {
+                decimal,
+                binary,
+                octal,
+                hex,
+            };
+            Kind kind = Kind::decimal;
+
+            std::string value;
+
+            // Either an entire standard suffix, or a part of one (to which you can add `u`/`U` prefix or suffix).
+            enum class SignedSuffix
+            {
+                l,
+                ll,
+                z,
+            };
+
+            struct Suffix
+            {
+                SignedSuffix signed_part{};
+                bool is_unsigned = false; // Does the suffix include letter `u`?
+            };
+            // Either one of the built-in literal suffixes, or a custom string.
+            // No suffix is stored as an empty string. This also helps us work around the Clang quirk with default member initializers in the first member of a variant.
+            std::variant<std::string, Suffix> suffix;
+        };
+        struct FloatingPoint
+        {
+            enum class Kind
+            {
+                decimal,
+                hex,
+            };
+            Kind kind = Kind::decimal;
+
+            std::string value_int; // The integral part, or empty if none.
+            std::string value_frac; // The fractional part, or empty if none.
+            std::string value_exp; // The exponent part, if any. This can optionall begin with a `+` or `-` sign.
+
+            enum class Suffix
+            {
+                f,
+                l,
+                f16,
+                f32,
+                f64,
+                f128,
+                bf16,
+            };
+            // Either one of the built-in literal suffixes, or a custom string.
+            // No suffix is stored as an empty string, for consistency with `Integer` (see above).
+            std::variant<std::string, Suffix> suffix;
+        };
+        std::variant<Integer, FloatingPoint> var = Integer{}; // Need the initializer to prevent `https://github.com/llvm/llvm-project/issues/36032`.
 
         friend CPPDECL_CONSTEXPR bool operator==(const NumberToken &, const NumberToken &);
+
+        [[nodiscard]] constexpr bool IsInteger() const {return !IsFloatingPoint();}
+        [[nodiscard]] constexpr bool IsFloatingPoint() const {return std::holds_alternative<FloatingPoint>(var);}
 
         // Visit all instances of any of `C...` nested in this. (None for this type.) `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {(void)flags; (void)func;}

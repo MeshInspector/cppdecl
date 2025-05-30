@@ -102,6 +102,19 @@ namespace cppdecl
         return !name.empty() && IsNonDigitIdentifierChar(name.front()) && std::all_of(name.begin() + 1, name.end(), IsIdentifierChar);
     }
 
+    [[nodiscard]] constexpr bool IsBinDigit(char ch)
+    {
+        return ch == '0' || ch == '1';
+    }
+    [[nodiscard]] constexpr bool IsOctalDigit(char ch)
+    {
+        return ch >= '0' && ch <= '7';
+    }
+    [[nodiscard]] constexpr bool IsHexDigit(char ch)
+    {
+        return IsDigit(ch) || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+    }
+
     // Is this a name of a built-in integral type?
     // `long long` (a multi-word name) isn't handled here.
     // `bool` also isn't handled here. We check it separately, because unlike those it can't have its signedness set explicitly.
@@ -177,6 +190,14 @@ namespace cppdecl
         bool ret = input.starts_with(word);
         if (ret)
             input.remove_prefix(word.size());
+        return ret;
+    }
+    // Same, but for trailing punctuation.
+    [[nodiscard]] constexpr bool ConsumeTrailingPunctuation(std::string_view &input, std::string_view word)
+    {
+        bool ret = input.ends_with(word);
+        if (ret)
+            input.remove_suffix(word.size());
         return ret;
     }
 
