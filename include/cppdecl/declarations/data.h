@@ -135,14 +135,16 @@ namespace cppdecl
     };
     CPPDECL_FLAG_OPERATORS(SingleWordFlags)
 
+    struct Attribute;
+    struct NumericLiteral;
+    struct PseudoExpr;
+    struct PseudoExprList;
+    struct PunctuationToken;
     struct QualifiedName;
     struct SimpleType;
-    struct PunctuationToken;
-    struct NumericLiteral;
     struct StringOrCharLiteral;
-    struct PseudoExprList;
     struct TemplateArgumentList;
-    struct Attribute;
+    struct Type;
 
     template <typename T>
     concept VisitableComponentType =
@@ -158,11 +160,18 @@ namespace cppdecl
 
     struct TemplateArgument;
 
+    template <typename T>
+    concept TemplateArgumentType = std::same_as<T, Type> || std::same_as<T, PseudoExpr>; // Sync with `TemplateArgument::Variant`.
+
     struct TemplateArgumentList
     {
         std::vector<TemplateArgument> args;
 
         CPPDECL_EQUALITY_DECLARE(TemplateArgumentList)
+
+        // Checks if this argument list matches `values...`, where each is either a `Type` or a `PseudoExpr`.
+        // Both the size and each element must match exactly.
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Matches(const TemplateArgumentType auto &... values) const;
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
@@ -292,12 +301,38 @@ namespace cppdecl
         // The type name. Never includes `signed` or `unsigned`, that's in `flags`.
         QualifiedName name;
 
+        // When adding new fields here, don't forget to update `Equals()`!
+
         // This accepts only single-word type names without `::` or any other punctuation. Accepts `long long` and `long double`, `double long`, but rejects signedness and such.
         [[nodiscard]] static CPPDECL_CONSTEXPR SimpleType FromSingleWord(std::string part);
         [[nodiscard]] static CPPDECL_CONSTEXPR SimpleType FromUnqualifiedName(UnqualifiedName part);
         [[nodiscard]] static CPPDECL_CONSTEXPR SimpleType FromQualifiedName(QualifiedName name);
 
         CPPDECL_EQUALITY_DECLARE(SimpleType)
+
+        enum class EqualsFlags
+        {
+            as_if_target_is_const = 1 << 0,
+        };
+        CPPDECL_FLAG_OPERATORS_IN_CLASS(EqualsFlags)
+
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Equals(const SimpleType &target, EqualsFlags eq_flags) const
+        {
+            CvQualifiers target_quals_fixed = target.quals;
+            if (bool(eq_flags & EqualsFlags::as_if_target_is_const))
+                target_quals_fixed |= CvQualifiers::const_;
+
+            if (quals != target_quals_fixed)
+                return false;
+
+            // Compare the remaining members.
+            return
+                attrs == target.attrs &&
+                // Skipping `quals`.
+                flags == target.flags &&
+                prefix == target.prefix &&
+                name == target.name;
+        }
 
         // Returns true if this is an invalid empty type.
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsEmpty() const
@@ -372,6 +407,8 @@ namespace cppdecl
         // The first modifier is the top-level one, it's the closest one to the variable name in the declaration.
         std::vector<TypeModifier> modifiers;
 
+        // When adding new fields here, don't forget to update `Equals()`!
+
         // This accepts only single-word type names without `::` or any other punctuation. Accepts `long long` and `long double`, `double long`, but rejects signedness and such.
         [[nodiscard]] static CPPDECL_CONSTEXPR Type FromSingleWord(std::string part);
         [[nodiscard]] static CPPDECL_CONSTEXPR Type FromUnqualifiedName(UnqualifiedName part);
@@ -379,6 +416,14 @@ namespace cppdecl
         [[nodiscard]] static CPPDECL_CONSTEXPR Type FromSimpleType(SimpleType simple_type);
 
         CPPDECL_EQUALITY_DECLARE(Type)
+
+        enum class EqualsFlags
+        {
+            as_if_target_is_const = 1 << 0,
+        };
+        CPPDECL_FLAG_OPERATORS_IN_CLASS(EqualsFlags)
+
+        CPPDECL_CONSTEXPR bool Equals(const Type &target, EqualsFlags eq_flags) const;
 
         // Returns true if this is an invalid empty type.
         // While normally an empty `simple_type` implies empty `modifiers`, it's not always the case.
@@ -566,6 +611,13 @@ namespace cppdecl
 
         // If `var` holds a `std::string` and `template_args` is empty, returns the string in `var`. Otherwise returns empty.
         [[nodiscard]] CPPDECL_CONSTEXPR std::string_view AsSingleWord(SingleWordFlags flags = {}) const;
+
+        // Checks if we have template argumens that exactly match `values...`, where each is either a `Type` or a `PseudoExpr`.
+        // Both the size and each element must match exactly.
+        [[nodiscard]] CPPDECL_CONSTEXPR bool TemplateArgsMatch(const TemplateArgumentType auto &... values) const
+        {
+            return template_args && template_args->Matches(values...);
+        }
 
         // Whether `var` holds a `std::string`, with a built-in type name.
         // Note that we return true for `long long`, `long double`, and `double long`.
@@ -896,10 +948,19 @@ namespace cppdecl
     // A template argument.
     struct TemplateArgument
     {
-        using Variant = std::variant<Type, PseudoExpr>;
+        using Variant = std::variant<Type, PseudoExpr>; // Sync with the `TemplateArgumentType` concept.
         Variant var;
 
         CPPDECL_EQUALITY_DECLARE(TemplateArgument)
+
+        // Returns true if this instance holds `T` (which is either `Type` or `PseudoExpr`) equal to `value`.
+        // You'd think `std::variant` would support this kind of comparison natively, but alas!
+        template <TemplateArgumentType T>
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Matches(const T &value) const
+        {
+            auto elem = std::get_if<T>(&var);
+            return elem && *elem == value;
+        }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
@@ -909,12 +970,29 @@ namespace cppdecl
         }
     };
 
+
+    // Has to be non-member, since a lot of different classes use it.
+    enum class ModifierEqualsFlags
+    {
+        // Pretend the target is `const`, if it can be cv-qualified at all.
+        as_if_target_is_const = 1 << 0,
+    };
+    CPPDECL_FLAG_OPERATORS(ModifierEqualsFlags)
+
     // A base class for type modifiers (applied by decorators) that have cv-qualifiers (and/or restrict-qualifiers, so references do count).
     struct QualifiedModifier
     {
         CvQualifiers quals{};
 
         CPPDECL_EQUALITY_DECLARE(QualifiedModifier)
+
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Equals(const QualifiedModifier &target, ModifierEqualsFlags flags) const
+        {
+            CvQualifiers target_quals_fixed = target.quals;
+            if (bool(flags & ModifierEqualsFlags::as_if_target_is_const))
+                target_quals_fixed |= CvQualifiers::const_;
+            return quals == target_quals_fixed;
+        }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
@@ -935,6 +1013,12 @@ namespace cppdecl
     {
         CPPDECL_EQUALITY_DECLARE(Pointer)
 
+        // Shadowing `QualifiedModifier::Equals()` solely to adjust the parameter type.
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Equals(const Pointer &target, ModifierEqualsFlags flags) const
+        {
+            return QualifiedModifier::Equals(target, flags);
+        }
+
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {QualifiedModifier::VisitEachComponent<C...>(flags, func);}
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {QualifiedModifier::VisitEachComponent<C...>(flags, func);}
@@ -948,6 +1032,11 @@ namespace cppdecl
 
         CPPDECL_EQUALITY_DECLARE(Reference)
 
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Equals(const Reference &target, ModifierEqualsFlags flags) const
+        {
+            return QualifiedModifier::Equals(target, flags) && kind == target.kind;
+        }
+
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {QualifiedModifier::VisitEachComponent<C...>(flags, func);}
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {QualifiedModifier::VisitEachComponent<C...>(flags, func);}
@@ -959,6 +1048,11 @@ namespace cppdecl
         QualifiedName base;
 
         CPPDECL_EQUALITY_DECLARE(MemberPointer)
+
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Equals(const MemberPointer &target, ModifierEqualsFlags flags) const
+        {
+            return QualifiedModifier::Equals(target, flags) && base == target.base;
+        }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
@@ -979,6 +1073,12 @@ namespace cppdecl
         PseudoExpr size;
 
         CPPDECL_EQUALITY_DECLARE(Array)
+
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Equals(const Array &target, ModifierEqualsFlags flags) const
+        {
+            (void)flags;
+            return *this == target;
+        }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {size.VisitEachComponent<C...>(flags, func);}
@@ -1009,6 +1109,12 @@ namespace cppdecl
 
         CPPDECL_EQUALITY_DECLARE(Function)
 
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Equals(const Function &target, ModifierEqualsFlags flags) const
+        {
+            (void)flags;
+            return *this == target; // Glad I don't have to reimplement this... Yet.
+        }
+
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
         template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
@@ -1034,6 +1140,15 @@ namespace cppdecl
         Variant var;
 
         CPPDECL_EQUALITY_DECLARE(TypeModifier)
+
+        [[nodiscard]] CPPDECL_CONSTEXPR bool Equals(const TypeModifier &target, ModifierEqualsFlags flags) const
+        {
+            // Simply dispatch to the `var`.
+            return std::visit([&]<typename T>(const T &elem){
+                auto target_elem = std::get_if<T>(&target.var);
+                return target_elem && elem.Equals(*target_elem, flags);
+            }, var);
+        }
 
         // Returns the qualifiers of this modifier, if any.
         [[nodiscard]] CPPDECL_CONSTEXPR CvQualifiers GetQualifiers() const
@@ -1108,6 +1223,12 @@ namespace cppdecl
     // --- Function definitions:
 
     CPPDECL_EQUALITY_DEFINE(TemplateArgumentList)
+
+    [[nodiscard]] CPPDECL_CONSTEXPR bool TemplateArgumentList::Matches(const TemplateArgumentType auto &... values) const
+    {
+        std::size_t i = 0;
+        return sizeof...(values) == args.size() && (args[i++].Matches(values) && ...);
+    }
 
     template <VisitableComponentType ...C>
     CPPDECL_CONSTEXPR void TemplateArgumentList::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
@@ -1458,6 +1579,24 @@ namespace cppdecl
     }
 
     CPPDECL_EQUALITY_DEFINE(Type)
+
+    CPPDECL_CONSTEXPR bool Type::Equals(const Type &target, EqualsFlags eq_flags) const
+    {
+        std::size_t n = modifiers.size();
+        if (n != target.modifiers.size())
+            return false;
+
+        bool as_if_target_is_const = bool(eq_flags & EqualsFlags::as_if_target_is_const);
+
+        for (std::size_t i = 0; i < n; i++)
+        {
+            if (!modifiers[i].Equals(target.modifiers[i], ModifierEqualsFlags::as_if_target_is_const * as_if_target_is_const))
+                return false;
+            as_if_target_is_const = false; // Only applies to the first modifier. If no modifiers, applies to the `simple_type` below.
+        }
+
+        return simple_type.Equals(target.simple_type, SimpleType::EqualsFlags::as_if_target_is_const * as_if_target_is_const);
+    }
 
     template <typename T> CPPDECL_CONSTEXPR       T *Type::As(std::size_t i)       {return i < modifiers.size() ? modifiers[i].As<T>() : nullptr;}
     template <typename T> CPPDECL_CONSTEXPR const T *Type::As(std::size_t i) const {return i < modifiers.size() ? modifiers[i].As<T>() : nullptr;}
