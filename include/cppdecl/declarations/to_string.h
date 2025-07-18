@@ -881,13 +881,15 @@ namespace cppdecl
                 }
             }
 
+            ret += ToString(target.name, flags);
+
+            // East const! Solely because `Foo_const_ref` + `Foo_rvalue_ref` looks more consistent than `const_Foo_ref` + `Foo_rvalue_ref`.
+            // This has to be synced with where the classes inherited from `QualifiedModifier` put their modifiers, so that they don't collide.
             if (target.quals != CvQualifiers{})
             {
-                ret += CvQualifiersToString(target.quals, '_', true);
                 ret += '_';
+                ret += CvQualifiersToString(target.quals, '_', true);
             }
-
-            ret += ToString(target.name, flags);
 
             return ret;
         }
@@ -2316,10 +2318,13 @@ namespace cppdecl
     {
         if (bool(flags & ToStringFlags::identifier))
         {
-            std::string ret = CvQualifiersToString(target.quals, '_', true);
-            if (!ret.empty())
+            std::string ret = "ptr";
+            // The qualifiers are at the end, for consistency with the east const in the function for `SimpleType`. See that function for more details.
+            if (target.quals != CvQualifiers{})
+            {
                 ret += '_';
-            ret += "ptr";
+                ret += CvQualifiersToString(target.quals, '_', true);
+            }
             return ret;
         }
         else if (bool(flags & ToStringFlags::debug))
@@ -2360,13 +2365,20 @@ namespace cppdecl
     {
         if (bool(flags & ToStringFlags::identifier))
         {
-            std::string ret = CvQualifiersToString(target.quals, '_', true);
-            if (!ret.empty())
+            assert(target.kind == RefQualifier::lvalue || target.kind == RefQualifier::rvalue);
+
+            std::string ret;
+            if (target.kind == RefQualifier::rvalue)
+                ret = "rvalue_ref";
+            else
+                ret = "ref";
+
+            // The qualifiers are at the end, for consistency with the east const in the function for `SimpleType`. See that function for more details.
+            if (target.quals != CvQualifiers{})
+            {
                 ret += '_';
-            if (target.kind == RefQualifier::lvalue)
-                ret += "ref";
-            else if (target.kind == RefQualifier::rvalue)
-                ret += "rvalue_ref";
+                ret += CvQualifiersToString(target.quals, '_', true);
+            }
 
             return ret;
         }
@@ -2438,16 +2450,16 @@ namespace cppdecl
     {
         if (bool(flags & ToStringFlags::identifier))
         {
-            std::string ret = CvQualifiersToString(target.quals, '_', true);
-            if (!ret.empty())
-                ret += '_';
-            ret += "memptr";
-            std::string type_str = ToString(target.base, flags);
-            if (!type_str.empty())
+            std::string ret = ToString(target.base, flags);
+            ret += "_memptr";
+
+            // The qualifiers are at the end, for consistency with the east const in the function for `SimpleType`. See that function for more details.
+            if (target.quals != CvQualifiers{})
             {
                 ret += '_';
-                ret += type_str;
+                ret += CvQualifiersToString(target.quals, '_', true);
             }
+
             return ret;
         }
         else if (bool(flags & ToStringFlags::debug))

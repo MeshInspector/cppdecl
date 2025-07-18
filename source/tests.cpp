@@ -852,7 +852,9 @@ int main()
     CheckParseSuccess("int *[]",                               m_any, "int_ptr_array", cppdecl::ToStringFlags::identifier);
     CheckParseSuccess("int *[42]",                             m_any, "int_ptr_array_42", cppdecl::ToStringFlags::identifier);
     CheckParseSuccess("int (*)[42]",                           m_any, "int_array_42_ptr", cppdecl::ToStringFlags::identifier);
-    CheckParseSuccess("const int *volatile",                   m_any, "const_int_volatile_ptr", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("const int *volatile",                   m_any, "int_const_ptr_volatile", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("const int &__restrict",                 m_any, "int_const_ref_restrict", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("const int A::* volatile",               m_any, "int_const_A_memptr_volatile", cppdecl::ToStringFlags::identifier);
     CheckParseSuccess("int *()",                               m_any, "int_ptr_func", cppdecl::ToStringFlags::identifier);
     CheckParseSuccess("int *(int, float x)",                   m_any, "int_ptr_func_from_int_float_x", cppdecl::ToStringFlags::identifier);
     CheckParseSuccess("int *(int, float x) &",                 m_any, "int_ptr_func_from_int_float_x_lvalue", cppdecl::ToStringFlags::identifier);
