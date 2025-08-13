@@ -975,7 +975,13 @@ int main()
 
     // libc++-style version namespace:
     CheckRoundtrip("std::__1::basic_string<char>", m_any, "std::__1::basic_string<char>", {});
-    CheckRoundtrip("std::__1::basic_string<char>", m_any, "std::basic_string<char>", {}, cppdecl::SimplifyFlags::bit_libcpp_remove_1_namespace_in_std);
+    CheckRoundtrip("std::__1::basic_string<char>", m_any, "std::basic_string<char>", {}, cppdecl::SimplifyFlags::bit_libcpp_remove_version_namespace_in_std);
+    // This form was seen on Emscripten:
+    CheckRoundtrip("std::__2::basic_string<char>", m_any, "std::__2::basic_string<char>", {});
+    CheckRoundtrip("std::__2::basic_string<char>", m_any, "std::basic_string<char>", {}, cppdecl::SimplifyFlags::bit_libcpp_remove_version_namespace_in_std);
+    // This form is supposedly used on Android:
+    CheckRoundtrip("std::__ndk1::basic_string<char>", m_any, "std::__ndk1::basic_string<char>", {});
+    CheckRoundtrip("std::__ndk1::basic_string<char>", m_any, "std::basic_string<char>", {}, cppdecl::SimplifyFlags::bit_libcpp_remove_version_namespace_in_std);
 
     // MSVC pointer annotations:
     CheckRoundtrip("int * __ptr32", m_any, "int *__ptr32", {});

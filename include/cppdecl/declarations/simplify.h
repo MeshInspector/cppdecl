@@ -32,11 +32,11 @@ namespace cppdecl
         // Replace `std::__cxx11` with `std`.
         bit_libstdcxx_remove_cxx11_namespace_in_std = 1 << 1,
         // Replace `std::__1` with `std`.
-        bit_libcpp_remove_1_namespace_in_std = 1 << 2,
+        bit_libcpp_remove_version_namespace_in_std = 1 << 2,
 
         bits_remove_std_version_namespace =
             bit_libstdcxx_remove_cxx11_namespace_in_std |
-            bit_libcpp_remove_1_namespace_in_std,
+            bit_libcpp_remove_version_namespace_in_std,
 
 
         // Rewrite iterators from their internal names.
@@ -150,7 +150,7 @@ namespace cppdecl
             bit_libstdcxx_remove_cxx11_namespace_in_std |
             bit_libstdcxx_normalize_iterators,
         stdlib_libcpp =
-            bit_libcpp_remove_1_namespace_in_std |
+            bit_libcpp_remove_version_namespace_in_std |
             bit_libcpp_normalize_iterators,
         stdlib_msvcstl =
             bit_msvcstl_normalize_iterators,
@@ -214,6 +214,14 @@ namespace cppdecl
 
         // Those are only used in this class:
 
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsLibcppVersionNamespace(std::string_view word)
+        {
+            return
+                word == "__1" ||
+                word == "__2" || // Seen on Emscripten.
+                word == "__ndk1"; // Seen in LLVM's CMakeLists.txt, supposedly used on Android.
+        }
+
         // If `name` is of the form `std[::{__cxx11,__1}]::A[::...]`, returns A. Otherwise returns an empty string.
         // Only permits the trailing `::...` if `index` isn't null.
         // On success, if `index` isn't null, writes the index of `A` into `*index`. That's typically 1, or 2 if we had to skip the version namespace.
@@ -226,7 +234,7 @@ namespace cppdecl
             if (name.parts.front().AsSingleWord() != "std")
                 return "";
             std::size_t part_index = 1;
-            if (name.parts.at(1).AsSingleWord() == "__cxx11" || name.parts.at(1).AsSingleWord() == "__1")
+            if (name.parts.at(1).AsSingleWord() == "__cxx11" || GetDerived().IsLibcppVersionNamespace(name.parts.at(1).AsSingleWord()))
                 part_index++;
             if (index ? name.parts.size() < part_index + 1 : name.parts.size() != part_index + 1)
                 return "";
@@ -562,7 +570,7 @@ namespace cppdecl
             }
 
             // Remove the version namespace from std.
-            if (bool(flags & (SimplifyFlags::bit_libstdcxx_remove_cxx11_namespace_in_std | SimplifyFlags::bit_libcpp_remove_1_namespace_in_std)))
+            if (bool(flags & (SimplifyFlags::bit_libstdcxx_remove_cxx11_namespace_in_std | SimplifyFlags::bit_libcpp_remove_version_namespace_in_std)))
             {
                 // The first part of `name` is `std`, and there are at least two parts.
                 bool is_in_std = name.parts.size() >= 2 && name.parts.front().AsSingleWord() == "std";
@@ -576,9 +584,9 @@ namespace cppdecl
                         name.parts.erase(name.parts.begin() + 1);
                     }
                 }
-                if (!removed_std_version_namespace && bool(flags & SimplifyFlags::bit_libcpp_remove_1_namespace_in_std))
+                if (!removed_std_version_namespace && bool(flags & SimplifyFlags::bit_libcpp_remove_version_namespace_in_std))
                 {
-                    if (is_in_std && name.parts.at(1).AsSingleWord() == "__1")
+                    if (is_in_std && GetDerived().IsLibcppVersionNamespace(name.parts.at(1).AsSingleWord()))
                     {
                         removed_std_version_namespace = true;
                         name.parts.erase(name.parts.begin() + 1);
@@ -1113,7 +1121,7 @@ namespace cppdecl
 
                     if (name.parts.size() >= 2 && name.parts.at(0).AsSingleWord() == "std")
                     {
-                        const std::size_t part_index = name.parts.at(1).AsSingleWord() == "__1" ? 2 : 1;
+                        const std::size_t part_index = GetDerived().IsLibcppVersionNamespace(name.parts.at(1).AsSingleWord()) ? 2 : 1;
 
                         if (
                             part_index < name.parts.size() &&
@@ -1139,15 +1147,15 @@ namespace cppdecl
                                     return false;
                                 return number->ToInteger<decltype(value)>() == value;
                             };
-                            auto IsLibcppStdNameIgnoringTemplateArgs = [](const QualifiedName &name, std::string_view target) -> bool
+                            auto IsLibcppStdNameIgnoringTemplateArgs = [&](const QualifiedName &name, std::string_view target) -> bool
                             {
-                                // Not using `GetDerived().AsStdName()` because this only needs one specific version namespace, the `__1`.
+                                // Not using `GetDerived().AsStdName()` because this only needs libc++ namespaces.
                                 // We're also not using this lambda for the first check above, because here we don't allow more unqualified names after the `target`.
                                 if (name.parts.size() < 2)
                                     return false;
                                 if (name.parts.at(0).AsSingleWord() != "std")
                                     return false;
-                                bool has_version_namespace = name.parts.at(1).AsSingleWord() == "__1";
+                                bool has_version_namespace = GetDerived().IsLibcppVersionNamespace(name.parts.at(1).AsSingleWord());
                                 if (name.parts.size() != (has_version_namespace ? 3 : 2))
                                     return false;
                                 return name.parts.back().AsSingleWord(SingleWordFlags::ignore_template_args) == target;
