@@ -815,6 +815,7 @@ namespace cppdecl
             if (bool(target.flags & SimpleTypeFlags::implied_int))
             {
                 assert(target.name.AsSingleWord() == "int");
+                assert(target.flags & (SimpleTypeFlags::unsigned_ | SimpleTypeFlags::explicitly_signed));
             }
             else if (bool(target.flags & SimpleTypeFlags::c_implied_double))
             {

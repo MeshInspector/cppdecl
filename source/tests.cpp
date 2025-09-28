@@ -773,6 +773,16 @@ int main()
     CheckRoundtrip("signed int", m_any, "int", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_signed);
     CheckRoundtrip("signed char", m_any, "signed char", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_signed);
 
+    // Those aren't redundant.
+    CheckRoundtrip("unsigned", m_any, "unsigned", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_signed);
+    CheckRoundtrip("signed", m_any, "signed", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_signed);
+
+    CheckRoundtrip("unsigned", m_any, "unsigned int", {}, cppdecl::SimplifyFlags::bit_common_add_implied_int);
+    CheckRoundtrip("signed", m_any, "signed int", {}, cppdecl::SimplifyFlags::bit_common_add_implied_int);
+
+    CheckRoundtrip("unsigned", m_any, "unsigned int", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_signed | cppdecl::SimplifyFlags::bit_common_add_implied_int);
+    CheckRoundtrip("signed", m_any, "int", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_signed | cppdecl::SimplifyFlags::bit_common_add_implied_int);
+
     CheckRoundtrip("short int", m_any, "short int");
     CheckRoundtrip("short int", m_any, "short", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_int);
     CheckRoundtrip("long int", m_any, "long int");

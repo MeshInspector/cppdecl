@@ -105,6 +105,7 @@ namespace cppdecl
         // This will also have the type name set to `"int"`. We do this when getting `unsigned` and `signed` without the `int`.
         // We don't do this for `long` and such. This is intentionally inconsistent, for sanity.
         // This is mutally exclusive with `redundant_int`.
+        // This implies `unsigned_` or `explicitly_signed`.
         implied_int = 1 << 3,
 
         // This is a C `_Complex` type.

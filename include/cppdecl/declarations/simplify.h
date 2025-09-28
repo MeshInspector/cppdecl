@@ -67,29 +67,35 @@ namespace cppdecl
         bit_common_remove_type_prefix = 1 << 8,
 
         // Remove `signed`, except from `signed char`.
+        // Will also not touch `signed` unless you also specify `bit_common_add_implied_int`, which turns it into `signed int`,
+        //   and then this flag turns it into just `int`.
         bit_common_remove_redundant_signed = 1 << 9,
 
         // Remove `int` from `short int`, `long int`, `long long int`.
         bit_common_remove_redundant_int = 1 << 10,
 
+        // Remove the "implied int" flag, forcing `int` to be spelled out.
+        // This is used only for `unsigned [int]` and `signed [int]`, and has no overload with `bit_common_remove_redundant_int`.
+        bit_common_add_implied_int = 1 << 11,
+
         // Remove allocators from template parameters.
-        bit_common_remove_defarg_allocator = 1 << 11,
+        bit_common_remove_defarg_allocator = 1 << 12,
         // Remove `std::char_traits<T>` from template parameters of `std::basic_string`.
         // This typically requires `bit_common_remove_defarg_allocator` as well, since we can't remove non-last template arguments,
         //   and having the allocator after this one will prevent it from being removed.
-        bit_common_remove_defarg_char_traits = 1 << 12,
+        bit_common_remove_defarg_char_traits = 1 << 13,
         // Remove `std::less<T>` and `std::equal_to<T>` from ordered and unordered containers respectively.
         // This typically requires `bit_common_remove_defarg_allocator` as well, since we can't remove non-last template arguments,
         //   and having the allocator after this one will prevent it from being removed.
-        bit_common_remove_defarg_comparator = 1 << 13,
+        bit_common_remove_defarg_comparator = 1 << 14,
         // Remove `std::hash<T>` from unordered containers.
         // This typically requires `bit_common_remove_defarg_allocator` and `bit_common_remove_defarg_comparator` as well, since we can't remove non-last template arguments,
         //   and having the allocator and comparator after this one will prevent it from being removed.
-        bit_common_remove_defarg_hash_functor = 1 << 14,
+        bit_common_remove_defarg_hash_functor = 1 << 15,
         // Remove `std::default_delete<T>` from `std::unique_ptr`.
-        bit_common_remove_defarg_default_delete = 1 << 15,
+        bit_common_remove_defarg_default_delete = 1 << 16,
         // Unused by default. Custom mixins might use this.
-        bit_common_remove_defargs_other = 1 << 16,
+        bit_common_remove_defargs_other = 1 << 17,
 
         // Remove various default arguments from templates.
         bits_common_remove_defargs =
@@ -103,12 +109,12 @@ namespace cppdecl
         // Rewrite `std::basic_string<char>` to `std::string` and such.
         // This typically requires `bit_common_remove_defarg_hash_functor`, `bit_common_remove_defarg_allocator`, and `bit_common_remove_defarg_comparator` as well,
         //   since this expects the default template arguments to be already stripped.
-        bit_common_rewrite_template_specializations_as_typedefs = 1 << 17,
+        bit_common_rewrite_template_specializations_as_typedefs = 1 << 18,
 
         // Rewrite `std::array<T, 42ul>` and such to just `std::array<T, 42>`.
         // We can't act on ALL numeric literals, because this might lose information if the template parameter is `auto`.
         // So we can only act on known classes such as `std::array`.
-        bit_common_remove_numeric_literal_suffixes_from_known_good_template_params = 1 << 18,
+        bit_common_remove_numeric_literal_suffixes_from_known_good_template_params = 1 << 19,
 
         // Various mostly compiler-independent bits.
         // Note that `bits_common_remove_defargs` isn't needed when you get the types from `__PRETTY_FUNCTION__` or equivalent on Clang.
@@ -118,6 +124,7 @@ namespace cppdecl
             bit_common_remove_type_prefix |
             bit_common_remove_redundant_signed |
             bit_common_remove_redundant_int |
+            bit_common_add_implied_int |
             bits_common_remove_defargs |
             bit_common_rewrite_template_specializations_as_typedefs |
             bit_common_remove_numeric_literal_suffixes_from_known_good_template_params,
@@ -126,7 +133,7 @@ namespace cppdecl
         // Fixes for C stuff:
 
         // Rewrite `_Bool` as `bool`.
-        bit_c_normalize_bool = 1 << 19,
+        bit_c_normalize_bool = 1 << 20,
 
         c =
             bit_c_normalize_bool,
@@ -194,7 +201,7 @@ namespace cppdecl
         // Those can be lossy, and produce invalid C++ types.
 
         // Rewrite both `std::expected` and `tl::expected` as just `expected`.
-        bit_extra_merge_std_tl_expected = 1 << 20,
+        bit_extra_merge_std_tl_expected = 1 << 21,
     };
     CPPDECL_FLAG_OPERATORS(SimplifyFlags)
 
@@ -1861,8 +1868,15 @@ namespace cppdecl
         {
             if (bool(flags & SimplifyFlags::bit_common_remove_type_prefix))
                 simple_type.prefix = SimpleTypePrefix{};
-            if (bool(flags & SimplifyFlags::bit_common_remove_redundant_signed) && bool(simple_type.flags & SimpleTypeFlags::explicitly_signed) && !simple_type.IsNonRedundantlySigned())
+
+            // Mark `int` as not implied. This has to be checked before `bit_common_remove_redundant_signed`.
+            if (bool(flags & SimplifyFlags::bit_common_add_implied_int))
+                simple_type.flags &= ~SimpleTypeFlags::implied_int;
+
+            // Here we don't remove `signed` if `int` is implied.
+            if (bool(flags & SimplifyFlags::bit_common_remove_redundant_signed) && bool(simple_type.flags & SimpleTypeFlags::explicitly_signed) && !simple_type.IsNonRedundantlySigned() && !bool(simple_type.flags & SimpleTypeFlags::implied_int))
                 simple_type.flags &= ~SimpleTypeFlags::explicitly_signed;
+
             if (bool(flags & SimplifyFlags::bit_common_remove_redundant_int) && bool(simple_type.flags & SimpleTypeFlags::redundant_int))
                 simple_type.flags &= ~SimpleTypeFlags::redundant_int;
         }
