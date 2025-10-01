@@ -1263,6 +1263,7 @@ namespace cppdecl
     {
         assert(!bool(flags & ToCodeFlags::mask_any_half_type));
         assert(!bool(flags & ToCodeFlags::lambda));
+        (void)flags;
 
         return target.value;
     }
@@ -1801,6 +1802,7 @@ namespace cppdecl
     {
         assert(!bool(flags & ToCodeFlags::mask_any_half_type));
         assert(!bool(flags & ToCodeFlags::lambda));
+        (void)flags;
 
         std::string ret;
 
@@ -2352,6 +2354,7 @@ namespace cppdecl
     {
         assert(!bool(flags & ToCodeFlags::mask_any_half_type));
         assert(!bool(flags & ToCodeFlags::lambda));
+        (void)flags;
 
         return "*" + CvQualifiersToString(target.quals & ~ignore_cv_quals);
     }
@@ -2394,6 +2397,7 @@ namespace cppdecl
     {
         assert(!bool(flags & ToCodeFlags::mask_any_half_type));
         assert(!bool(flags & ToCodeFlags::lambda));
+        (void)flags;
 
         std::string ret(RefQualifierToString(target.kind));
         ret += CvQualifiersToString(target.quals & ~ignore_cv_quals);
