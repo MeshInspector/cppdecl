@@ -3,6 +3,7 @@
 #include "cppdecl/declarations/simplify_modules/phmap.h"
 #include "cppdecl/declarations/simplify.h"
 #include "cppdecl/declarations/to_string.h"
+#include "cppdecl/declarations/unnamed_types.h"
 #include "cppdecl/type_name.h"
 
 #include <iostream>
@@ -1803,6 +1804,28 @@ int main()
     // Check that simplification handles the numbers correclty.
     CheckTypeRoundtrip("A<4'2, 1'2.e0'0>", "A<42, 12.0>", {}, cppdecl::SimplifyFlags::bit_common_normalize_numbers);
 
+
+    // Unnamed types.
+    if (!cppdecl::ContainsUnnamedTypes("(unnamed struct at /foo/bar)")) Fail(""); // Clang, __PRETTY_FUNCTION__
+    if (!cppdecl::ContainsUnnamedTypes("(unnamed class at /foo/bar)")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("(unnamed union at /foo/bar)")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("(unnamed enum at /foo/bar)")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("(lambda at /foo/bar)")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("<unnamed struct>")) Fail(""); // GCC, __PRETTY_FUNCTION__
+    if (!cppdecl::ContainsUnnamedTypes("<unnamed class>")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("<unnamed union>")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("<unnamed enum>")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("<lambda(int)>")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("{unnamed type#1}")) Fail(""); // GCC, typeid
+    if (!cppdecl::ContainsUnnamedTypes("{lambda(int)#1}")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("<unnamed-type-blah>")) Fail(""); // MSVC, both __PRETTY_FUNCTION__ and typeid
+    if (!cppdecl::ContainsUnnamedTypes("<lambda_1>")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("'unnamed'")) Fail(""); // GCC+llvm-cxxfilt
+    if (!cppdecl::ContainsUnnamedTypes("'lambda'")) Fail(""); // ^
+    if (!cppdecl::ContainsUnnamedTypes("$_0")) Fail(""); // Clang, typeid, both lambdas and struct/class/union/enum
+
+    if (cppdecl::ContainsUnnamedTypes("blah")) Fail(""); // Just a random good string.
+    if (cppdecl::ContainsUnnamedTypes("")) Fail(""); // ^
 
 
 

@@ -20,10 +20,17 @@ install_headers(
 )
 install_headers(
     'include/cppdecl/declarations/data.h',
+    'include/cppdecl/declarations/parse_simple.h',
     'include/cppdecl/declarations/parse.h',
     'include/cppdecl/declarations/simplify.h',
     'include/cppdecl/declarations/to_string.h',
+    'include/cppdecl/declarations/unnamed_types.h',
     install_dir: 'cppdecl/declarations'
+)
+install_headers(
+    'include/cppdecl/declarations/simplify_modules/all.h',
+    'include/cppdecl/declarations/simplify_modules/phmap.h',
+    install_dir: 'cppdecl/declarations/simplify_modules'
 )
 install_headers(
     'include/cppdecl/type_name.h',
