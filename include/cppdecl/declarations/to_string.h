@@ -427,6 +427,27 @@ namespace cppdecl
                 ret = '~';
                 ret += ToCode(dtor.simple_type, flags);
             },
+            [&](const NewDeleteOperator &op)
+            {
+                ret = "operator ";
+                switch (op.kind)
+                {
+                  case NewDeleteOperator::Kind::new_:
+                    ret += "new";
+                    break;
+                  case NewDeleteOperator::Kind::new_array:
+                    ret += "new[]";
+                    break;
+                  case NewDeleteOperator::Kind::delete_:
+                    ret += "delete";
+                    break;
+                  case NewDeleteOperator::Kind::delete_array:
+                    ret += "delete[]";
+                    break;
+                  default:
+                    assert(false);
+                }
+            },
             [&](const UnspellableName &unsp)
             {
                 ret += unsp.name;
@@ -478,6 +499,27 @@ namespace cppdecl
                     if (!ret.empty())
                         ret += '_';
                     ret += "destructor";
+                },
+                [&](const NewDeleteOperator &op)
+                {
+                    ret = "operator_";
+                    switch (op.kind)
+                    {
+                      case NewDeleteOperator::Kind::new_:
+                        ret += "new";
+                        break;
+                      case NewDeleteOperator::Kind::new_array:
+                        ret += "new_array";
+                        break;
+                      case NewDeleteOperator::Kind::delete_:
+                        ret += "delete";
+                        break;
+                      case NewDeleteOperator::Kind::delete_array:
+                        ret += "delete_array";
+                        break;
+                      default:
+                        assert(false);
+                    }
                 },
                 [&](const UnspellableName &unsp)
                 {
@@ -532,6 +574,28 @@ namespace cppdecl
                     ret += ToString(dtor.simple_type, flags);
                     ret += '`';
                 },
+                [&](const NewDeleteOperator &op)
+                {
+                    ret = "new_del_op=`";
+                    switch (op.kind)
+                    {
+                      case NewDeleteOperator::Kind::new_:
+                        ret += "new";
+                        break;
+                      case NewDeleteOperator::Kind::new_array:
+                        ret += "new[]";
+                        break;
+                      case NewDeleteOperator::Kind::delete_:
+                        ret += "delete";
+                        break;
+                      case NewDeleteOperator::Kind::delete_array:
+                        ret += "delete[]";
+                        break;
+                      default:
+                        assert(false);
+                    }
+                    ret += '`';
+                },
                 [&](const UnspellableName &unsp)
                 {
                     ret += "unsp=`";
@@ -556,25 +620,25 @@ namespace cppdecl
             std::visit(Overload{
                 [&](const std::string &name)
                 {
-                    ret += '`';
+                    ret = '`';
                     ret += name;
                     ret += '`';
                 },
                 [&](const OverloadedOperator &op)
                 {
-                    ret += "overloaded operator `";
+                    ret = "overloaded operator `";
                     ret += op.token;
                     ret += '`';
                 },
                 [&](const ConversionOperator &conv)
                 {
-                    ret += "conversion operator to [";
+                    ret = "conversion operator to [";
                     ret += ToString(conv.target_type, flags);
                     ret += ']';
                 },
                 [&](const UserDefinedLiteral &udl)
                 {
-                    ret += "user-defined literal `";
+                    ret = "user-defined literal `";
                     ret += udl.suffix;
                     ret += '`';
                     if (udl.space_before_suffix)
@@ -582,9 +646,30 @@ namespace cppdecl
                 },
                 [&](const DestructorName &dtor)
                 {
-                    ret += "destructor for type [";
+                    ret = "destructor for type [";
                     ret += ToString(dtor.simple_type, flags);
                     ret += ']';
+                },
+                [&](const NewDeleteOperator &op)
+                {
+                    ret = "operator ";
+                    switch (op.kind)
+                    {
+                      case NewDeleteOperator::Kind::new_:
+                        ret += "new";
+                        break;
+                      case NewDeleteOperator::Kind::new_array:
+                        ret += "new[]";
+                        break;
+                      case NewDeleteOperator::Kind::delete_:
+                        ret += "delete";
+                        break;
+                      case NewDeleteOperator::Kind::delete_array:
+                        ret += "delete[]";
+                        break;
+                      default:
+                        assert(false);
+                    }
                 },
                 [&](const UnspellableName &unsp)
                 {
@@ -1178,7 +1263,7 @@ namespace cppdecl
                         ? !ret.ends_with('(')
                         : (
                             !bool(flags & ToCodeFlags::no_space_before_pointer) &&
-                            !ret.empty() && (ret.back() == '>' || IsIdentifierChar(ret.back()))
+                            !ret.empty() && !ret.ends_with('*') && !ret.ends_with('&') && !ret.ends_with('(') && !ret.ends_with(' ')
                         )
                     )
                     {

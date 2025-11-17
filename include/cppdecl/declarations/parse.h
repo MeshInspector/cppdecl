@@ -548,7 +548,40 @@ namespace cppdecl
                     {
                         // The whitespace was already stripped at this point.
 
-                        if (ConsumePunctuation(s, "\"\""))
+                        bool is_op_new_delete = false;
+                        { // Operator new or delete.
+                            bool is_delete = false;
+
+                            if (ConsumeWord(s, "new") || (is_delete = ConsumeWord(s, "delete")))
+                            {
+                                std::string_view s_copy = s;
+                                TrimLeadingWhitespace(s_copy);
+                                bool is_array = false;
+                                if (ConsumePunctuation(s_copy, "["))
+                                {
+                                    TrimLeadingWhitespace(s_copy);
+                                    if (ConsumePunctuation(s_copy, "]"))
+                                    {
+                                        s = s_copy;
+                                        is_array = true;
+                                    }
+                                }
+
+                                NewDeleteOperator &op = new_unqual_part.var.emplace<NewDeleteOperator>();
+
+                                op.kind = is_delete
+                                    ? (is_array ? NewDeleteOperator::Kind::delete_array : NewDeleteOperator::Kind::delete_)
+                                    : (is_array ? NewDeleteOperator::Kind::new_array : NewDeleteOperator::Kind::new_);
+
+                                is_op_new_delete = true;
+                            }
+                        }
+
+                        if (is_op_new_delete)
+                        {
+                            // Nothing, already handled above.
+                        }
+                        else if (ConsumePunctuation(s, "\"\""))
                         {
                             // User-defined literal.
 
@@ -2050,6 +2083,7 @@ namespace cppdecl
                     [](const ConversionOperator &) {return "Conversion operator must be a function.";},
                     [](const UserDefinedLiteral &) {return "User-defined literal must be a function.";},
                     [](const DestructorName &) {return "Destructor must be a function.";},
+                    [](const NewDeleteOperator &) {return "Operator `new` or `delete` must be a function.";},
                     [](const UnspellableName &) {return (const char *)nullptr;},
                 }, ret_decl.name.parts.back().var);
             };
@@ -2105,6 +2139,7 @@ namespace cppdecl
                         [](const ConversionOperator &) {return "A conversion operator must have no return type.";},
                         [](const UserDefinedLiteral &) {assert(false); return (const char *)nullptr;},
                         [](const DestructorName &) {return "A destructor must have no return type.";},
+                        [](const NewDeleteOperator &) {assert(false); return (const char *)nullptr;},
                         [](const UnspellableName &) {assert(false); return (const char *)nullptr;},
                     }, ret_decl.name.parts.back().var)};
                 }

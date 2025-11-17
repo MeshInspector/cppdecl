@@ -643,6 +643,24 @@ namespace cppdecl
         template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {return simple_type.VisitEachComponent<C...>(flags, func);}
     };
 
+    struct NewDeleteOperator
+    {
+        enum class Kind
+        {
+            new_, // `new`
+            new_array, // `new[]`
+            delete_, // `delete`
+            delete_array, // `delete[]`
+        };
+        Kind kind{};
+
+        CPPDECL_EQUALITY_DECLARE(NewDeleteOperator)
+
+        // Visit all instances of any of `C...` nested in this. (None for this type.) `func` is `(auto &name) -> void`.
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {(void)flags; (void)func; return false;}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {(void)flags; (void)func; return false;}
+    };
+
     // A compiler-specific unqualified name that in most cases can't be parsed by the usual C++ rules.
     struct UnspellableName
     {
@@ -658,7 +676,7 @@ namespace cppdecl
     // An unqualified name, possibly with template arguments.
     struct UnqualifiedName
     {
-        using Variant = std::variant<std::string, OverloadedOperator, ConversionOperator, UserDefinedLiteral, DestructorName, UnspellableName>;
+        using Variant = std::variant<std::string, OverloadedOperator, ConversionOperator, UserDefinedLiteral, DestructorName, NewDeleteOperator, UnspellableName>;
 
         Variant var;
 
@@ -1342,6 +1360,7 @@ namespace cppdecl
     CPPDECL_EQUALITY_DEFINE(ConversionOperator)
     CPPDECL_EQUALITY_DEFINE(UserDefinedLiteral)
     CPPDECL_EQUALITY_DEFINE(DestructorName)
+    CPPDECL_EQUALITY_DEFINE(NewDeleteOperator)
     CPPDECL_EQUALITY_DEFINE(UnspellableName)
     CPPDECL_EQUALITY_DEFINE(UnqualifiedName)
 

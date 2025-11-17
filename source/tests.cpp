@@ -888,6 +888,19 @@ int main()
     CheckParseSuccess("int *(int, float x) const &",           m_any, "int_ptr_func_from_int_float_x_const_lvalue", cppdecl::ToStringFlags::identifier);
 
 
+    // Operators `new` and `delete`.
+    CheckParseSuccess("void operator new()", m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[new_del_op=`new`}]}"})");
+    CheckParseSuccess("void operator new()", m_any, "operator new, a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator new[] ()", m_any, "operator new[], a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator new  [  ] ()", m_any, "operator new[], a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator delete()", m_any, "operator delete, a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator delete[] ()", m_any, "operator delete[], a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator delete  [  ] ()", m_any, "operator delete[], a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator new", m_any, "void_operator_new", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void operator new[]", m_any, "void_operator_new_array", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void operator delete", m_any, "void_operator_delete", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void operator delete[]", m_any, "void_operator_delete_array", cppdecl::ToStringFlags::identifier);
+
 
     // MSVC pointer annotations.
     CheckParseSuccess("int *__ptr32 x", m_any, "`x`, a __ptr32 pointer to `int`", {});
@@ -1848,6 +1861,16 @@ int main()
     TestUnspellableType("(anonymous namespace)"); // Clang (both typeid and __PRETTY_FUNCTION__), c++filt, llvm-cxxfilt
     TestUnspellableType("(anonymous)"); // Older Clang?
     TestUnspellableType("{anonymous}"); // GCC, __PRETTY_FUNCTION__
+
+    // How spaces before `*` and `&` are inserted:
+    CheckTypeRoundtrip("<lambda_1> *", "<lambda_1> *");
+    CheckTypeRoundtrip("<lambda_1> &", "<lambda_1> &");
+    CheckTypeRoundtrip("'lambda' *", "'lambda' *");
+    CheckTypeRoundtrip("'lambda' &", "'lambda' &");
+    CheckTypeRoundtrip("{lambda()#1} *", "{lambda()#1} *");
+    CheckTypeRoundtrip("{lambda()#1} &", "{lambda()#1} &");
+    CheckTypeRoundtrip("(anonymous) *", "(anonymous) *");
+    CheckTypeRoundtrip("(anonymous) &", "(anonymous) &");
 
     CheckParseSuccess("foo::<unnamed struct>::bar", m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="foo"},{unsp=`<unnamed struct>`},{name="bar"}]}}",name="{global_scope=false,parts=[]}"})");
     CheckParseSuccess("foo::<unnamed struct>::bar", m_any, "unnamed of type `foo`::unspellable name `<unnamed struct>`::`bar`", {});
