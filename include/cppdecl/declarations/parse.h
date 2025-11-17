@@ -62,6 +62,24 @@ namespace cppdecl
     [[nodiscard]] CPPDECL_CONSTEXPR ParseSimpleTypeResult ParseSimpleType(std::string_view &input, ParseSimpleTypeFlags flags = {});
 
 
+    enum class ParsePseudoExprFlags
+    {
+        // Stop parsing on `>`. Good for template argument lists.
+        // Otherwise will assume that it's a punctuation symbol.
+        stop_on_gt_sign = 1 << 0,
+
+        // Only consume one token.
+        stop_after_one_token = 1 << 1,
+    };
+    CPPDECL_FLAG_OPERATORS(ParsePseudoExprFlags)
+
+    using ParsePseudoExprResult = std::variant<PseudoExpr, ParseError>;
+    // Parse an expression. Even though we call those expressions, it's a fairly loose collection of tokens.
+    // We continue parsing until we hit a comma or a closing bracket: `)`,`}`,`]`,`>`.
+    // Can return an empty expression.
+    [[nodiscard]] CPPDECL_CONSTEXPR ParsePseudoExprResult ParsePseudoExpr(std::string_view &input, ParsePseudoExprFlags flags = {});
+
+
     enum class ParseAttributeListFlags
     {
         allow_cpp_style_attrs = 1 << 0,
@@ -204,6 +222,9 @@ namespace cppdecl
 
         // Allow `true`, `false`, `nullptr` as the name.
         allow_builtin_names = 1 << 4,
+
+        // Reject unspellable name parts: lambdas, unnamed structs/classes/unions/enums, anonymous namespaces.
+        only_spellable_names = 1 << 5,
     };
     CPPDECL_FLAG_OPERATORS(ParseQualifiedNameFlags)
 
@@ -249,9 +270,8 @@ namespace cppdecl
         bool allow_destructors = bool(flags & ParseQualifiedNameFlags::allow_unqualified_destructors);
 
         bool first = true;
-        bool first_part_is_known_type = false;
 
-        if ((!s.empty() && IsNonDigitIdentifierChar(s.front())) || (allow_destructors && s.starts_with("~")))
+        if (!s.empty())
         {
             while (true)
             {
@@ -259,8 +279,181 @@ namespace cppdecl
 
                 bool stop_on_this_iteration = false;
 
+                // Check if we got an unspellable name?
+                std::string_view unsp_name;
+                if (!bool(flags & ParseQualifiedNameFlags::only_spellable_names))
+                {
+                    auto TryExactString = [&](std::string_view target) -> bool
+                    {
+                        if (ConsumePunctuation(s, target))
+                        {
+                            unsp_name = target;
+                            return true;
+                        }
+
+                        return false;
+                    };
+
+                    // Try some exact strings first.
+                    bool found =
+                        TryExactString("<unnamed struct>") || // GCC, __PRETTY_FUNCTION__
+                        TryExactString("<unnamed class>") || // ^
+                        TryExactString("<unnamed union>") || // ^
+                        TryExactString("<unnamed enum>") || // ^
+                        TryExactString("'unnamed'") || // GCC+llvm-cxxfilt (struct/class/union/enum)
+                        TryExactString("'lambda'") || // ^
+                        TryExactString("`anonymous-namespace'") || // MSVC, __FUNCSIG__
+                        TryExactString("`anonymous namespace'") || // MSVC, typeid
+                        TryExactString("(anonymous namespace)") || // Clang (both typeid and __PRETTY_FUNCTION__), c++filt, llvm-cxxfilt
+                        TryExactString("{anonymous}"); // GCC, __PRETTY_FUNCTION__
+
+                    if (!found)
+                    {
+                        enum class IdKind
+                        {
+                            none,
+                            number,
+                            identifier,
+                        };
+
+                        // Accepts a string consisting of following parts:
+                        // * `prefix` string.
+                        // * Optionally a parenthesized list of parameter types (if `param_list == true`).
+                        // * `mid` string.
+                        // * An ID, either nothing, a number, or a simple unqualified identifier.
+                        // * `suffix` string.
+                        // * Optionally a word boundary, if `must_end_on_word_boundary == true`.
+                        //  some ID (number or identifier), then the suffix.
+                        // If `identifier == false`, then the ID is a number.
+                        auto TryStringWithId = [&](std::string_view prefix, bool param_list, std::string_view mid, IdKind id_kind, std::string_view suffix, bool must_end_on_word_boundary)
+                        {
+                            std::string_view s_copy = s;
+                            if (ConsumePunctuation(s_copy, prefix))
+                            {
+                                // The parameter type list, if any.
+                                if (param_list && s_copy.starts_with('('))
+                                {
+                                    // Use `ParsePseudoExpr()` to consume this list. Perhaps not very efficient, since we don't save it anywhere, but very convenient.
+                                    if (!std::holds_alternative<ParseError>(ParsePseudoExpr(s_copy, ParsePseudoExprFlags::stop_after_one_token)))
+                                        param_list = false; // Success.
+                                }
+
+                                if (!param_list && ConsumePunctuation(s_copy, mid))
+                                {
+                                    // The ID, if any.
+                                    if (
+                                        id_kind != IdKind::none &&
+                                        !s_copy.empty() &&
+                                        (id_kind != IdKind::identifier || IsNonDigitIdentifierChar(s_copy.front())) &&
+                                        (id_kind != IdKind::number || IsDigit(s_copy.front()))
+                                    )
+                                    {
+                                        do
+                                            s_copy.remove_prefix(1);
+                                        while (!s_copy.empty() && (id_kind == IdKind::identifier ? IsIdentifierChar(s_copy.front()) : IsDigit(s_copy.front())));
+
+                                        id_kind = IdKind::none;
+                                    }
+
+                                    if (id_kind == IdKind::none && ConsumePunctuation(s_copy, suffix) && (!must_end_on_word_boundary || s_copy.empty() || !IsIdentifierChar(s_copy.front())))
+                                    {
+                                        unsp_name = std::string_view(s.data(), std::size_t(s_copy.data() - s.data()));
+                                        s = s_copy;
+                                        return true;
+                                    }
+                                }
+                            }
+
+                            return false;
+                        };
+
+                        found =
+                            TryStringWithId("<lambda", true, "", IdKind::none, ">", false) || // `<lambda(int)>` GCC, __PRETTY_FUNCTION__
+                            TryStringWithId("{unnamed type#", false, "", IdKind::number, "}", false) || // `{unnamed type#1}`, GCC, typeid
+                            TryStringWithId("{lambda", true, "#", IdKind::number, "}", false) || // `{lambda(int)#1}`, ^
+                            TryStringWithId("<unnamed-type-", false, "", IdKind::identifier, ">", false) || // `<unnamed-type-blah>`, MSVC, both __PRETTY_FUNCTION__ and typeid
+                            TryStringWithId("<lambda_", false, "", IdKind::number, ">", false) || // `<lambda_1>`, ^
+                            TryStringWithId("$_", false, "", IdKind::number, "", true); // `$_0`, Clang, typeid, both lambdas and struct/class/union/enum
+                    }
+
+                    if (!found)
+                    {
+                        std::string_view s_copy = s;
+
+                        bool found_prefix = false;
+                        for (std::string_view prefix : {
+                            std::string_view("(unnamed struct at "),
+                            std::string_view("(unnamed class at "),
+                            std::string_view("(unnamed union at "),
+                            std::string_view("(unnamed enum at "),
+                            std::string_view("(lambda at "),
+                        })
+                        {
+                            if (ConsumePunctuation(s_copy, prefix))
+                            {
+                                found_prefix = true;
+                                break;
+                            }
+                        }
+
+                        // Find the first `)` that's preceded by `:line:column`.
+                        if (found_prefix)
+                        {
+                            bool found_end = false;
+
+                            std::size_t pos = 0;
+                            while ((pos = s_copy.find(')', pos + 1)) != std::string_view::npos)
+                            {
+                                std::string_view s_tmp(s_copy.data(), pos);
+
+                                auto ConsumeNumberAndColon = [&]() -> bool
+                                {
+                                    if (s_tmp.empty() || !IsDigit(s_tmp.back()))
+                                        return false;
+
+                                    do
+                                        s_tmp.remove_suffix(1);
+                                    while (!s_tmp.empty() && IsDigit(s_tmp.back()));
+
+                                    return ConsumeTrailingPunctuation(s_tmp, ":");
+                                };
+
+                                if (ConsumeNumberAndColon() && ConsumeNumberAndColon()) // Need to consume two numbers: `:line:column`.
+                                {
+                                    found_end = true;
+                                    s_copy.remove_prefix(pos + 1);
+                                    break;
+                                }
+                            }
+
+                            if (!found_end)
+                            {
+                                // This is worthy of a hard error.
+                                input = s_copy;
+                                return ret = ParseError{.message = "Expected `:line:column)` after the filename that starts here."};
+                            }
+
+                            unsp_name = std::string_view(s.data(), std::size_t(s_copy.data() - s.data()));
+                            s = s_copy;
+                        }
+                    }
+                }
+
+                // Did we successfully parsed an unspellable name?
+                if (!unsp_name.empty())
+                {
+                    first = false;
+
+                    UnqualifiedName new_unqual_part;
+                    UnspellableName &unsp = new_unqual_part.var.emplace<UnspellableName>();
+                    unsp.name = unsp_name;
+
+                    ret_name.parts.push_back(std::move(new_unqual_part));
+
+                    input = s;
+                }
                 // A destructor?
-                if (allow_destructors && ConsumePunctuation(s, "~"))
+                else if (allow_destructors && ConsumePunctuation(s, "~"))
                 {
                     first = false;
 
@@ -286,6 +479,9 @@ namespace cppdecl
                 {
                     // Not a destructor.
 
+                    if (s.empty() || !IsNonDigitIdentifierChar(s.front()))
+                        break;
+
                     const char *cur = s.data();
 
                     do
@@ -299,12 +495,15 @@ namespace cppdecl
                     if (first)
                     {
                         first = false;
-                        first_part_is_known_type = IsTypeRelatedKeyword(new_word);
-
-                        if (first_part_is_known_type && bool(flags & ParseQualifiedNameFlags::only_valid_nontypes))
+                        if (IsTypeRelatedKeyword(new_word))
                         {
-                            input = input_before_parse;
-                            return ret;
+                            if (bool(flags & ParseQualifiedNameFlags::only_valid_nontypes))
+                            {
+                                input = input_before_parse;
+                                return ret;
+                            }
+
+                            stop_on_this_iteration = true;
                         }
 
                         if (IsLiteralConstantKeyword(new_word))
@@ -410,26 +609,19 @@ namespace cppdecl
                 s = input;
 
                 // If this is a `true`, `false` or `nullptr`, break now.
+                // Also break if this is a built-in type that can't take more `::...` parts.
                 if (stop_on_this_iteration)
                     break;
 
                 // Allow destructors on the next iterations, if not already.
                 allow_destructors = true;
 
-                // Make sure we have `:: letter` after this, or break.
+                // Make sure we have `::...` after this, or break.
                 if (!only_unqualified && ConsumePunctuation(s, "::"))
                 {
                     TrimLeadingWhitespace(s);
                     if (!s.empty())
                     {
-                        if (IsNonDigitIdentifierChar(s.front()) || (allow_destructors && s.starts_with('~')))
-                        {
-                            if (first_part_is_known_type)
-                                return ret;
-
-                            continue;
-                        }
-
                         if (s.front() == '*') // This looks like a member pointer.
                         {
                             s.remove_prefix(1);
@@ -443,12 +635,14 @@ namespace cppdecl
                             ret = std::move(memptr);
                             return ret;
                         }
+
+                        continue;
                     }
                 }
 
 
                 // Stop if the last component doesn't form a valid type, and we want one.
-                if (bool(flags & ParseQualifiedNameFlags::only_valid_types) && !std::holds_alternative<std::string>(ret_name.parts.back().var))
+                if (bool(flags & ParseQualifiedNameFlags::only_valid_types) && !ret_name.parts.back().CouldBeType())
                 {
                     // Roll back everything. This can't be an error.
                     input = input_before_parse;
@@ -467,7 +661,7 @@ namespace cppdecl
         // Do a final validation.
         if (
             // If we're trying to produce a type and the name doesn't end with a string...
-            (bool(flags & ParseQualifiedNameFlags::only_valid_types) && !ret_name.LastComponentIsNormalString())
+            (bool(flags & ParseQualifiedNameFlags::only_valid_types) && !ret_name.CouldBeType())
             // Uncommenting this would reject `A::A` as types. Not sure if this is a good idea.
             // (bool(flags & ParseQualifiedNameFlags::only_valid_types) && ret_name.CertainlyIsQualifiedConstructorName())
         )
@@ -1017,25 +1211,26 @@ namespace cppdecl
         return ret;
     }
 
-    enum class ParsePseudoExprFlags
-    {
-        // Stop parsing on `>`. Good for template argument lists.
-        // Otherwise will assume that it's a punctuation symbol.
-        stop_on_gt_sign = 1 << 0,
-    };
-    CPPDECL_FLAG_OPERATORS(ParsePseudoExprFlags)
-
-    using ParsePseudoExprResult = std::variant<PseudoExpr, ParseError>;
     // Parse an expression. Even though we call those expressions, it's a fairly loose collection of tokens.
     // We continue parsing until we hit a comma or a closing bracket: `)`,`}`,`]`,`>`.
     // Can return an empty expression.
-    [[nodiscard]] CPPDECL_CONSTEXPR ParsePseudoExprResult ParsePseudoExpr(std::string_view &input, ParsePseudoExprFlags flags = {})
+    [[nodiscard]] CPPDECL_CONSTEXPR ParsePseudoExprResult ParsePseudoExpr(std::string_view &input, ParsePseudoExprFlags flags)
     {
+        // Note that we don't propagate any `flags` when recursing.
+        // This is undesired for `stop_on_gt_sign` and `stop_after_one_token`, which are currently the only available flags.
+
         ParsePseudoExprResult ret;
         PseudoExpr &ret_expr = std::get<PseudoExpr>(ret);
 
+        bool first = true;
+
         while (true)
         {
+            if (first)
+                first = false;
+            else if (bool(flags & ParsePseudoExprFlags::stop_after_one_token))
+                return ret;
+
             TrimLeadingWhitespace(input);
 
             if (
@@ -1850,6 +2045,7 @@ namespace cppdecl
                     [](const ConversionOperator &) {return "Conversion operator must be a function.";},
                     [](const UserDefinedLiteral &) {return "User-defined literal must be a function.";},
                     [](const DestructorName &) {return "Destructor must be a function.";},
+                    [](const UnspellableName &) {return (const char *)nullptr;},
                 }, ret_decl.name.parts.back().var);
             };
 
@@ -1904,6 +2100,7 @@ namespace cppdecl
                         [](const ConversionOperator &) {return "A conversion operator must have no return type.";},
                         [](const UserDefinedLiteral &) {assert(false); return (const char *)nullptr;},
                         [](const DestructorName &) {return "A destructor must have no return type.";},
+                        [](const UnspellableName &) {assert(false); return (const char *)nullptr;},
                     }, ret_decl.name.parts.back().var)};
                 }
 

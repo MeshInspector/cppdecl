@@ -24,7 +24,6 @@ install_headers(
     'include/cppdecl/declarations/parse.h',
     'include/cppdecl/declarations/simplify.h',
     'include/cppdecl/declarations/to_string.h',
-    'include/cppdecl/declarations/unnamed_types.h',
     install_dir: 'cppdecl/declarations'
 )
 install_headers(

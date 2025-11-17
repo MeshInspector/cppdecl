@@ -1913,13 +1913,13 @@ namespace cppdecl
     {
         if (traits.ShouldAct(flags))
         {
-            target.template VisitEachComponent<QualifiedName, CvQualifiers, SimpleType, NumericLiteral>(
+            (void)target.template VisitEachComponent<QualifiedName, CvQualifiers, SimpleType, NumericLiteral>(
                 {},
                 Overload{
-                    [&](QualifiedName &name){traits.SimplifyQualifiedNameNonRecursively(flags, name);},
-                    [&](CvQualifiers &quals){traits.SimplifyCvQualifiers(flags, quals);},
-                    [&](SimpleType &quals){traits.SimplifySimpleTypeNonRecursively(flags, quals);},
-                    [&](NumericLiteral &lit){traits.SimplifyNumericLiteral(flags, lit);},
+                    [&](QualifiedName &name){traits.SimplifyQualifiedNameNonRecursively(flags, name); return false;},
+                    [&](CvQualifiers &quals){traits.SimplifyCvQualifiers(flags, quals); return false;},
+                    [&](SimpleType &quals){traits.SimplifySimpleTypeNonRecursively(flags, quals); return false;},
+                    [&](NumericLiteral &lit){traits.SimplifyNumericLiteral(flags, lit); return false;},
                 }
             );
         }

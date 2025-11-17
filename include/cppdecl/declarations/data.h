@@ -202,10 +202,10 @@ namespace cppdecl
         [[nodiscard]] CPPDECL_CONSTEXPR bool Matches(const TemplateArgumentType auto &... values) const;
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<TemplateArgumentList &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<TemplateArgumentList &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -270,6 +270,13 @@ namespace cppdecl
         //   the first part are ignored).
         [[nodiscard]] CPPDECL_CONSTEXPR bool CertainlyIsQualifiedConstructorName() const;
 
+        // Is this possibly a type name?
+        [[nodiscard]] CPPDECL_CONSTEXPR bool CouldBeType() const;
+
+        // Does this name contain ugly `UnspellableName` parts directly, making it unspellable?
+        // This is rarely useful, prefer the free function `IsUnspellable()` that recurses into all entities.
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsDirectlyUnspellable() const;
+
 
         enum class EmptyReturnType
         {
@@ -294,12 +301,18 @@ namespace cppdecl
 
         // Visit this instance, and all instances of any of `C...` nested in it. `func` is `(auto &name) -> void`.
         // Note! We can have other names nested in this, so you can't just call the function on it directly.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<QualifiedName &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<QualifiedName &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
+
+    // Recursively checks if the object is impossible to spell, because it contains `UnspellableName` parts.
+    [[nodiscard]] CPPDECL_CONSTEXPR bool IsUnspellable(const auto &elem, VisitEachComponentFlags flags = {})
+    {
+        return elem.template VisitEachComponent<QualifiedName>(flags, [](const QualifiedName &name){return name.IsDirectlyUnspellable();});
+    }
 
     struct AttributeList
     {
@@ -309,10 +322,10 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(AttributeList)
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<AttributeList &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<AttributeList &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -417,22 +430,32 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
         {
-            attrs.VisitEachComponent<C...>(flags, func);
+            if (attrs.VisitEachComponent<C...>(flags, func))
+                return true;
 
             if constexpr ((std::same_as<C, CvQualifiers> || ...))
-                func(quals);
+            {
+                if (func(quals))
+                    return true;
+            }
 
-            name.VisitEachComponent<C...>(flags, func);
+            if (name.VisitEachComponent<C...>(flags, func))
+                return true;
 
             // Using postorder here for consistency with `QualifierName`, which needs to use post-order for simplification reasons.
             if constexpr ((std::same_as<C, SimpleType> || ...))
-                func(*this);
+            {
+                if (func(*this))
+                    return true;
+            }
+
+            return false;
         }
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<SimpleType &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<SimpleType &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -560,10 +583,10 @@ namespace cppdecl
         CPPDECL_CONSTEXPR void AppendType(Type other);
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<Type &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<Type &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -576,8 +599,8 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(OverloadedOperator)
 
         // Visit all instances of any of `C...` nested in this. (None for this type.) `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {(void)flags; (void)func;}
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {(void)flags; (void)func;}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {(void)flags; (void)func; return false;}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {(void)flags; (void)func; return false;}
     };
 
     // Represents `operator T`.
@@ -588,8 +611,8 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(ConversionOperator)
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {target_type.VisitEachComponent<C...>(flags, func);}
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {target_type.VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {return target_type.VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {return target_type.VisitEachComponent<C...>(flags, func);}
     };
 
     // Represents `operator""_blah`.
@@ -604,8 +627,8 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(UserDefinedLiteral)
 
         // Visit all instances of any of `C...` nested in this. (None for this type.) `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {(void)flags; (void)func;}
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {(void)flags; (void)func;}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {(void)flags; (void)func; return false;}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {(void)flags; (void)func; return false;}
     };
 
     // A destructor name of the form `~Blah`.
@@ -616,14 +639,26 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(DestructorName)
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {simple_type.VisitEachComponent<C...>(flags, func);}
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {simple_type.VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {return simple_type.VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {return simple_type.VisitEachComponent<C...>(flags, func);}
+    };
+
+    // A compiler-specific unqualified name that in most cases can't be parsed by the usual C++ rules.
+    struct UnspellableName
+    {
+        std::string name;
+
+        CPPDECL_EQUALITY_DECLARE(UnspellableName)
+
+        // Visit all instances of any of `C...` nested in this. (None for this type.) `func` is `(auto &name) -> void`.
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {(void)flags; (void)func; return false;}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {(void)flags; (void)func; return false;}
     };
 
     // An unqualified name, possibly with template arguments.
     struct UnqualifiedName
     {
-        using Variant = std::variant<std::string, OverloadedOperator, ConversionOperator, UserDefinedLiteral, DestructorName>;
+        using Variant = std::variant<std::string, OverloadedOperator, ConversionOperator, UserDefinedLiteral, DestructorName, UnspellableName>;
 
         Variant var;
 
@@ -664,11 +699,14 @@ namespace cppdecl
         //   the user manually sets it, or something?
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInTypeName(IsBuiltInTypeNameFlags flags = IsBuiltInTypeNameFlags::allow_all) const;
 
+        // Could this be a type name, when used alone or as the last part of a qualified name.
+        [[nodiscard]] CPPDECL_CONSTEXPR bool CouldBeType() const;
+
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<UnqualifiedName &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<UnqualifiedName &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -682,10 +720,10 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(PunctuationToken)
 
         // Visit all instances of any of `C...` nested in this. (None for this type.) `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<PunctuationToken &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<PunctuationToken &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -824,10 +862,10 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. (None for this type.) `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<NumericLiteral &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<NumericLiteral &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -865,10 +903,10 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(StringOrCharLiteral)
 
         // Visit all instances of any of `C...` nested in this. (None for this type.) `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<StringOrCharLiteral &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<StringOrCharLiteral &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -893,10 +931,10 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(PseudoExprList)
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<PseudoExprList &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<PseudoExprList &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -917,10 +955,10 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<PseudoExpr &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<PseudoExpr &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -942,10 +980,10 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<Decl &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<Decl &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -976,8 +1014,8 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {T::template VisitEachComponent<C...>(flags, func); if (ambiguous_alternative) ambiguous_alternative->template VisitEachComponent<C...>(flags, func);}
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {T::template VisitEachComponent<C...>(flags, func); if (ambiguous_alternative) ambiguous_alternative->template VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {if (T::template VisitEachComponent<C...>(flags, func)) return true; return ambiguous_alternative && ambiguous_alternative->template VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {if (T::template VisitEachComponent<C...>(flags, func)) return true; return ambiguous_alternative && ambiguous_alternative->template VisitEachComponent<C...>(flags, func);}
     };
 
     using MaybeAmbiguousDecl = MaybeAmbiguous<Decl>;
@@ -1009,10 +1047,10 @@ namespace cppdecl
         [[nodiscard]] CPPDECL_CONSTEXPR const PseudoExpr *AsPseudoExpr() const {return std::get_if<PseudoExpr>(&var);}
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<TemplateArgument &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<TemplateArgument &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -1041,16 +1079,21 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
         {
             (void)flags;
 
             if constexpr ((std::same_as<C, CvQualifiers> || ...))
-                func(quals);
+            {
+                if (func(quals))
+                    return true;
+            }
+
+            return false;
         }
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<QualifiedModifier &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<QualifiedModifier &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -1066,8 +1109,8 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {QualifiedModifier::VisitEachComponent<C...>(flags, func);}
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {QualifiedModifier::VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {return QualifiedModifier::VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {return QualifiedModifier::VisitEachComponent<C...>(flags, func);}
     };
 
     // A reference to...
@@ -1084,8 +1127,8 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {QualifiedModifier::VisitEachComponent<C...>(flags, func);}
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {QualifiedModifier::VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {return QualifiedModifier::VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {return QualifiedModifier::VisitEachComponent<C...>(flags, func);}
     };
 
     // A member pointer to... (a variable/function of type...)
@@ -1101,14 +1144,15 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
         {
-            base.VisitEachComponent<C...>(flags, func);
-            QualifiedModifier::VisitEachComponent<C...>(flags, func);
+            if (base.VisitEachComponent<C...>(flags, func))
+                return true;
+            return QualifiedModifier::VisitEachComponent<C...>(flags, func);
         }
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<MemberPointer &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<MemberPointer &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -1127,8 +1171,8 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {size.VisitEachComponent<C...>(flags, func);}
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {size.VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {return size.VisitEachComponent<C...>(flags, func);}
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {return size.VisitEachComponent<C...>(flags, func);}
     };
 
     // A function returning...
@@ -1162,10 +1206,10 @@ namespace cppdecl
         }
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<Function &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<Function &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -1229,10 +1273,10 @@ namespace cppdecl
         template <typename T> [[nodiscard]] CPPDECL_CONSTEXPR const T *As() const {return std::get_if<T>(&var);}
 
         // Visit all instances of any of `C...` nested in this, if any.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func);
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<TypeModifier &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<TypeModifier &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -1251,17 +1295,23 @@ namespace cppdecl
         CPPDECL_EQUALITY_DECLARE(Attribute)
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
         {
-            expr.VisitEachComponent<C...>(flags, func);
+            if (expr.VisitEachComponent<C...>(flags, func))
+                return true;
 
             // Using postorder here for consistency with everything else.
             if constexpr ((std::same_as<C, Attribute> || ...))
-                func(*this);
+            {
+                if (func(*this))
+                    return true;
+            }
+
+            return false;
         }
-        template <VisitableComponentType ...C> CPPDECL_CONSTEXPR void VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
+        template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const
         {
-            const_cast<Attribute &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp){func(std::as_const(comp));});
+            return const_cast<Attribute &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
 
@@ -1277,16 +1327,22 @@ namespace cppdecl
     }
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void TemplateArgumentList::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool TemplateArgumentList::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         for (auto &arg : args)
-            arg.VisitEachComponent<C...>(flags, func);
+        {
+            if (arg.VisitEachComponent<C...>(flags, func))
+                return true;
+        }
+
+        return false;
     }
 
     CPPDECL_EQUALITY_DEFINE(OverloadedOperator)
     CPPDECL_EQUALITY_DEFINE(ConversionOperator)
     CPPDECL_EQUALITY_DEFINE(UserDefinedLiteral)
     CPPDECL_EQUALITY_DEFINE(DestructorName)
+    CPPDECL_EQUALITY_DEFINE(UnspellableName)
     CPPDECL_EQUALITY_DEFINE(UnqualifiedName)
 
     CPPDECL_CONSTEXPR bool UnqualifiedName::Equals(const UnqualifiedName &target, EqualsFlags flags) const
@@ -1335,8 +1391,13 @@ namespace cppdecl
         return false;
     }
 
+    CPPDECL_CONSTEXPR bool UnqualifiedName::CouldBeType() const
+    {
+        return std::holds_alternative<std::string>(var) || std::holds_alternative<UnspellableName>(var);
+    }
+
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void UnqualifiedName::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool UnqualifiedName::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         if (
             !bool(flags & VisitEachComponentFlags::no_recurse_into_names) &&
@@ -1348,44 +1409,65 @@ namespace cppdecl
         {
             if (template_args)
             {
-                template_args->VisitEachComponent<C...>(flags & ~VisitEachComponentFlags::this_name_is_nontype, func);
+                if (template_args->VisitEachComponent<C...>(flags & ~VisitEachComponentFlags::this_name_is_nontype, func))
+                    return true;
 
                 if constexpr ((std::same_as<C, TemplateArgumentList> || ...))
-                    func(*template_args);
+                {
+                    if (func(*template_args))
+                        return true;
+                }
             }
 
-            std::visit(Overload{
-                [](std::string &){}, // Nothing here.
-                [&](auto &elem){elem.template VisitEachComponent<C...>(flags, func);}
+            return std::visit(Overload{
+                [](std::string &){return false;}, // Nothing here.
+                [&](auto &elem){return elem.template VisitEachComponent<C...>(flags, func);}
             }, var);
         }
+
+        return false;
     }
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void PunctuationToken::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool PunctuationToken::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         (void)flags;
 
         if constexpr ((std::same_as<C, PunctuationToken> || ...))
-            func(*this);
+        {
+            if (func(*this))
+                return true;
+        }
+
+        return false;
     }
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void NumericLiteral::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool NumericLiteral::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         (void)flags;
 
         if constexpr ((std::same_as<C, NumericLiteral> || ...))
-            func(*this);
+        {
+            if (func(*this))
+                return true;
+        }
+
+        return false;
     }
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void StringOrCharLiteral::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool StringOrCharLiteral::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         (void)flags;
 
         if constexpr ((std::same_as<C, StringOrCharLiteral> || ...))
-            func(*this);
+        {
+            if (func(*this))
+                return true;
+        }
+
+        return false;
     }
 
     CPPDECL_CONSTEXPR QualifiedName QualifiedName::FromSingleWord(std::string part)
@@ -1482,6 +1564,16 @@ namespace cppdecl
         return a && b && *a == *b;
     }
 
+    CPPDECL_CONSTEXPR bool QualifiedName::CouldBeType() const
+    {
+        return !parts.empty() && parts.back().CouldBeType();
+    }
+
+    CPPDECL_CONSTEXPR bool QualifiedName::IsDirectlyUnspellable() const
+    {
+        return std::any_of(parts.begin(), parts.end(), [](const UnqualifiedName &part){return std::holds_alternative<UnspellableName>(part.var);});
+    }
+
     CPPDECL_CONSTEXPR QualifiedName::EmptyReturnType QualifiedName::IsFunctionNameRequiringEmptyReturnType() const
     {
         if (parts.empty())
@@ -1492,7 +1584,7 @@ namespace cppdecl
         if (CertainlyIsQualifiedConstructorName())
             return EmptyReturnType::yes;
 
-        if (!LastComponentIsNormalString())
+        if (!CouldBeType())
             return EmptyReturnType::no;
 
         // An unqualified constructor perhaps?
@@ -1531,7 +1623,7 @@ namespace cppdecl
     }
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void QualifiedName::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool QualifiedName::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         if (
             !bool(flags & VisitEachComponentFlags::no_recurse_into_names) &&
@@ -1542,8 +1634,11 @@ namespace cppdecl
         )
         {
             for (auto &part : parts)
+            {
                 // Preserving `VisitEachComponentFlags::this_name_is_nontype` here. Unqualified names will strip it themselves.
-                part.VisitEachComponent<C...>(flags, func);
+                if (part.VisitEachComponent<C...>(flags, func))
+                    return true;
+            }
         }
 
 
@@ -1559,18 +1654,26 @@ namespace cppdecl
                 !bool(flags & VisitEachComponentFlags::this_name_is_nontype)
             )
             {
-                func(*this);
+                if (func(*this))
+                    return true;
             }
         }
+
+        return false;
     }
 
     CPPDECL_EQUALITY_DEFINE(AttributeList)
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void AttributeList::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool AttributeList::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         for (Attribute &attr : attrs)
-            attr.VisitEachComponent<C...>(flags, func);
+        {
+            if (attr.VisitEachComponent<C...>(flags, func))
+                return true;
+        }
+
+        return false;
     }
 
     CPPDECL_CONSTEXPR SimpleType SimpleType::FromSingleWord(std::string part)
@@ -1702,15 +1805,25 @@ namespace cppdecl
     }
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void Type::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool Type::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
-        simple_type.VisitEachComponent<C...>(flags, func);
+        if (simple_type.VisitEachComponent<C...>(flags, func))
+            return true;
+
         for (TypeModifier &m : modifiers)
-            m.VisitEachComponent<C...>(flags, func);
+        {
+            if (m.VisitEachComponent<C...>(flags, func))
+                return true;
+        }
 
         // Using postorder here for consistency with `QualifierName`, which needs to use post-order for simplification reasons.
         if constexpr ((std::same_as<C, Type> || ...))
-            func(*this);
+        {
+            if (func(*this))
+                return true;
+        }
+
+        return false;
     }
 
     CPPDECL_EQUALITY_DEFINE(PunctuationToken)
@@ -1725,28 +1838,42 @@ namespace cppdecl
     CPPDECL_EQUALITY_DEFINE(PseudoExprList)
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void PseudoExprList::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool PseudoExprList::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         for (auto &elem : elems)
-            elem.VisitEachComponent<C...>(flags, func);
+        {
+            if (elem.VisitEachComponent<C...>(flags, func))
+                return true;
+        }
+
+        return false;
     }
 
     CPPDECL_EQUALITY_DEFINE(PseudoExpr)
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void PseudoExpr::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool PseudoExpr::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         for (auto &token : tokens)
-            std::visit([&](auto &elem){elem.template VisitEachComponent<C...>(flags, func);}, token);
+        {
+            if (std::visit([&](auto &elem){return elem.template VisitEachComponent<C...>(flags, func);}, token))
+                return true;
+        }
+
+        return false;
     }
 
     CPPDECL_EQUALITY_DEFINE(Decl)
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void Decl::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool Decl::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
-        type.VisitEachComponent<C...>(flags, func);
-        name.VisitEachComponent<C...>(flags | VisitEachComponentFlags::this_name_is_nontype, func);
+        if (type.VisitEachComponent<C...>(flags, func))
+            return true;
+        if (name.VisitEachComponent<C...>(flags | VisitEachComponentFlags::this_name_is_nontype, func))
+            return true;
+
+        return false;
     }
 
     template <typename T>
@@ -1755,9 +1882,9 @@ namespace cppdecl
     CPPDECL_EQUALITY_DEFINE(TemplateArgument)
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void TemplateArgument::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool TemplateArgument::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
-        std::visit([&](auto &elem){elem.template VisitEachComponent<C...>(flags, func);}, var);
+        return std::visit([&](auto &elem){return elem.template VisitEachComponent<C...>(flags, func);}, var);
     }
 
     CPPDECL_EQUALITY_DEFINE(QualifiedModifier)
@@ -1769,21 +1896,29 @@ namespace cppdecl
     CPPDECL_EQUALITY_DEFINE(Function)
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void Function::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool Function::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
         if constexpr ((std::same_as<C, CvQualifiers> || ...))
-            func(cv_quals);
+        {
+            if (func(cv_quals))
+                return true;
+        }
 
         for (auto &param : params)
-            param.VisitEachComponent<C...>(flags, func);
+        {
+            if (param.VisitEachComponent<C...>(flags, func))
+                return true;
+        }
+
+        return false;
     }
 
     CPPDECL_EQUALITY_DEFINE(TypeModifier)
 
     template <VisitableComponentType ...C>
-    CPPDECL_CONSTEXPR void TypeModifier::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
+    CPPDECL_CONSTEXPR bool TypeModifier::VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
     {
-        std::visit([&](auto &elem){elem.template VisitEachComponent<C...>(flags, func);}, var);
+        return std::visit([&](auto &elem){return elem.template VisitEachComponent<C...>(flags, func);}, var);
     }
 
     CPPDECL_EQUALITY_DEFINE(Attribute)

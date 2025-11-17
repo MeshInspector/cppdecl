@@ -3,7 +3,6 @@
 #include "cppdecl/declarations/simplify_modules/phmap.h"
 #include "cppdecl/declarations/simplify.h"
 #include "cppdecl/declarations/to_string.h"
-#include "cppdecl/declarations/unnamed_types.h"
 #include "cppdecl/type_name.h"
 
 #include <iostream>
@@ -1805,27 +1804,55 @@ int main()
     CheckTypeRoundtrip("A<4'2, 1'2.e0'0>", "A<42, 12.0>", {}, cppdecl::SimplifyFlags::bit_common_normalize_numbers);
 
 
-    // Unnamed types.
-    if (!cppdecl::ContainsUnnamedTypes("(unnamed struct at /foo/bar)")) Fail(""); // Clang, __PRETTY_FUNCTION__
-    if (!cppdecl::ContainsUnnamedTypes("(unnamed class at /foo/bar)")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("(unnamed union at /foo/bar)")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("(unnamed enum at /foo/bar)")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("(lambda at /foo/bar)")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("<unnamed struct>")) Fail(""); // GCC, __PRETTY_FUNCTION__
-    if (!cppdecl::ContainsUnnamedTypes("<unnamed class>")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("<unnamed union>")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("<unnamed enum>")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("<lambda(int)>")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("{unnamed type#1}")) Fail(""); // GCC, typeid
-    if (!cppdecl::ContainsUnnamedTypes("{lambda(int)#1}")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("<unnamed-type-blah>")) Fail(""); // MSVC, both __PRETTY_FUNCTION__ and typeid
-    if (!cppdecl::ContainsUnnamedTypes("<lambda_1>")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("'unnamed'")) Fail(""); // GCC+llvm-cxxfilt
-    if (!cppdecl::ContainsUnnamedTypes("'lambda'")) Fail(""); // ^
-    if (!cppdecl::ContainsUnnamedTypes("$_0")) Fail(""); // Clang, typeid, both lambdas and struct/class/union/enum
+    // Unspellable types.
+    auto TestUnspellableType = [&](std::string str)
+    {
+        CheckTypeRoundtrip(str, str);
+        CheckTypeRoundtrip(str + "::foo", str + "::foo");
+        CheckTypeRoundtrip("foo::" + str, "foo::" + str);
+        CheckTypeRoundtrip("foo::" + str + "::bar", "foo::" + str + "::bar");
+        CheckTypeRoundtrip("foo::" + str + "::bar::" + str + "::baz", "foo::" + str + "::bar::" + str + "::baz");
+    };
 
-    if (cppdecl::ContainsUnnamedTypes("blah")) Fail(""); // Just a random good string.
-    if (cppdecl::ContainsUnnamedTypes("")) Fail(""); // ^
+    TestUnspellableType("(unnamed struct at /foo/bar42:43)baz:10:20)"); // Clang, __PRETTY_FUNCTION__
+    TestUnspellableType("(unnamed class at /foo/bar42:43)baz:10:20)"); // ^
+    TestUnspellableType("(unnamed union at /foo/bar42:43)baz:10:20)"); // ^
+    TestUnspellableType("(unnamed enum at /foo/bar42:43)baz:10:20)"); // ^
+    TestUnspellableType("(lambda at /foo/bar42:43)baz:10:20)"); // ^
+    TestUnspellableType("<unnamed struct>"); // GCC, __PRETTY_FUNCTION__
+    TestUnspellableType("<unnamed class>"); // ^
+    TestUnspellableType("<unnamed union>"); // ^
+    TestUnspellableType("<unnamed enum>"); // ^
+    TestUnspellableType("<lambda()>"); // ^
+    TestUnspellableType("<lambda(int, const std::vector<int> *)>"); // ^
+    TestUnspellableType("{unnamed type#1}"); // GCC, typeid
+    TestUnspellableType("{unnamed type#42}"); // GCC, typeid
+    TestUnspellableType("{lambda()#1}"); // ^
+    TestUnspellableType("{lambda(int, const std::vector<int> *)#42}"); // ^
+    TestUnspellableType("<unnamed-type-a>"); // MSVC, both __PRETTY_FUNCTION__ and typeid
+    TestUnspellableType("<unnamed-type-blah>"); // ^
+    TestUnspellableType("<lambda_1>"); // ^
+    TestUnspellableType("<lambda_42>"); // ^
+    TestUnspellableType("'unnamed'"); // GCC+llvm-cxxfilt
+    TestUnspellableType("'lambda'"); // ^
+    TestUnspellableType("$_0"); // Clang, typeid, both lambdas and struct/class/union/enum
+    TestUnspellableType("$_42"); // ^
+
+    // Anonymous namespaces:
+    TestUnspellableType("`anonymous-namespace'"); // MSVC, __FUNCSIG__
+    TestUnspellableType("`anonymous namespace'"); // MSVC, typeid
+    TestUnspellableType("(anonymous namespace)"); // Clang (both typeid and __PRETTY_FUNCTION__), c++filt, llvm-cxxfilt
+    TestUnspellableType("{anonymous}"); // GCC, __PRETTY_FUNCTION__
+
+    CheckParseSuccess("foo::<unnamed struct>::bar", m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="foo"},{unsp=`<unnamed struct>`},{name="bar"}]}}",name="{global_scope=false,parts=[]}"})");
+    CheckParseSuccess("foo::<unnamed struct>::bar", m_any, "unnamed of type `foo`::unspellable name `<unnamed struct>`::`bar`", {});
+    CheckParseSuccess("foo::<unnamed struct>::bar", m_any, "foo_unnamed_struct_bar", cppdecl::ToStringFlags::identifier);
+
+    if (cppdecl::IsUnspellable(cppdecl::ParseType_Simple("foo"))) Fail("");
+    if (!cppdecl::IsUnspellable(cppdecl::ParseType_Simple("foo::<unnamed struct>::bar"))) Fail("");
+
+    // if (cppdecl::ContainsUnnamedTypes("blah")) Fail(""); // Just a random good string.
+    // if (cppdecl::ContainsUnnamedTypes("")) Fail(""); // ^
 
 
 

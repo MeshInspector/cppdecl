@@ -427,6 +427,10 @@ namespace cppdecl
                 ret = '~';
                 ret += ToCode(dtor.simple_type, flags);
             },
+            [&](const UnspellableName &unsp)
+            {
+                ret += unsp.name;
+            },
         }, target.var);
 
         if (target.template_args)
@@ -474,6 +478,10 @@ namespace cppdecl
                     if (!ret.empty())
                         ret += '_';
                     ret += "destructor";
+                },
+                [&](const UnspellableName &unsp)
+                {
+                    ret += KeepOnlyIdentifierChars(unsp.name);
                 },
             }, target.var);
 
@@ -524,6 +532,12 @@ namespace cppdecl
                     ret += ToString(dtor.simple_type, flags);
                     ret += '`';
                 },
+                [&](const UnspellableName &unsp)
+                {
+                    ret += "unsp=`";
+                    ret += unsp.name;
+                    ret += '`';
+                },
             }, target.var);
 
             if (target.template_args)
@@ -571,6 +585,12 @@ namespace cppdecl
                     ret += "destructor for type [";
                     ret += ToString(dtor.simple_type, flags);
                     ret += ']';
+                },
+                [&](const UnspellableName &unsp)
+                {
+                    ret += "unspellable name `";
+                    ret += unsp.name;
+                    ret += '`';
                 },
             }, target.var);
 
