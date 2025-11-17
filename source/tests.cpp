@@ -1818,6 +1818,10 @@ int main()
     TestUnspellableType("(unnamed class at /foo/bar42:43)baz:10:20)"); // ^
     TestUnspellableType("(unnamed union at /foo/bar42:43)baz:10:20)"); // ^
     TestUnspellableType("(unnamed enum at /foo/bar42:43)baz:10:20)"); // ^
+    TestUnspellableType("(anonymous struct at /foo/bar42:43)baz:10:20)"); // Either older Clang or some other condition? Not sure.
+    TestUnspellableType("(anonymous class at /foo/bar42:43)baz:10:20)"); // ^
+    TestUnspellableType("(anonymous union at /foo/bar42:43)baz:10:20)"); // ^
+    TestUnspellableType("(anonymous enum at /foo/bar42:43)baz:10:20)"); // ^
     TestUnspellableType("(lambda at /foo/bar42:43)baz:10:20)"); // ^
     TestUnspellableType("<unnamed struct>"); // GCC, __PRETTY_FUNCTION__
     TestUnspellableType("<unnamed class>"); // ^
@@ -1842,6 +1846,7 @@ int main()
     TestUnspellableType("`anonymous-namespace'"); // MSVC, __FUNCSIG__
     TestUnspellableType("`anonymous namespace'"); // MSVC, typeid
     TestUnspellableType("(anonymous namespace)"); // Clang (both typeid and __PRETTY_FUNCTION__), c++filt, llvm-cxxfilt
+    TestUnspellableType("(anonymous)"); // Older Clang?
     TestUnspellableType("{anonymous}"); // GCC, __PRETTY_FUNCTION__
 
     CheckParseSuccess("foo::<unnamed struct>::bar", m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="foo"},{unsp=`<unnamed struct>`},{name="bar"}]}}",name="{global_scope=false,parts=[]}"})");
@@ -1851,8 +1856,9 @@ int main()
     if (cppdecl::IsUnspellable(cppdecl::ParseType_Simple("foo"))) Fail("");
     if (!cppdecl::IsUnspellable(cppdecl::ParseType_Simple("foo::<unnamed struct>::bar"))) Fail("");
 
-    // if (cppdecl::ContainsUnnamedTypes("blah")) Fail(""); // Just a random good string.
-    // if (cppdecl::ContainsUnnamedTypes("")) Fail(""); // ^
+    // Some real-world tests of unspellable types:
+    CheckTypeRoundtrip("MR::PointOnObject::(anonymous union at ./scripts/mrbind/../../source/MRMesh/MRPointOnObject.h:25:5)", "MR::PointOnObject::(anonymous union at ./scripts/mrbind/../../source/MRMesh/MRPointOnObject.h:25:5)");
+    CheckTypeRoundtrip("(unnamed struct at C:/Program Files (x86)/Windows Kits/10/include/10.0.19041.0/shared/rpcndr.h:275:9) *", "(unnamed struct at C:/Program Files (x86)/Windows Kits/10/include/10.0.19041.0/shared/rpcndr.h:275:9) *");
 
 
 

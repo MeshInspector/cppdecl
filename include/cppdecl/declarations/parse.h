@@ -305,6 +305,7 @@ namespace cppdecl
                         TryExactString("`anonymous-namespace'") || // MSVC, __FUNCSIG__
                         TryExactString("`anonymous namespace'") || // MSVC, typeid
                         TryExactString("(anonymous namespace)") || // Clang (both typeid and __PRETTY_FUNCTION__), c++filt, llvm-cxxfilt
+                        TryExactString("(anonymous)") || // Older Clang?
                         TryExactString("{anonymous}"); // GCC, __PRETTY_FUNCTION__
 
                     if (!found)
@@ -386,6 +387,10 @@ namespace cppdecl
                             std::string_view("(unnamed class at "),
                             std::string_view("(unnamed union at "),
                             std::string_view("(unnamed enum at "),
+                            std::string_view("(anonymous struct at "), // Hmm, I've seen those too.
+                            std::string_view("(anonymous class at "),
+                            std::string_view("(anonymous union at "),
+                            std::string_view("(anonymous enum at "),
                             std::string_view("(lambda at "),
                         })
                         {
