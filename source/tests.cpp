@@ -889,7 +889,7 @@ int main()
 
 
     // Operators `new` and `delete`.
-    CheckParseSuccess("void operator new()", m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[new_del_op=`new`}]}"})");
+    CheckParseSuccess("void operator new()", m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{new_del_op=`new`}]}"})");
     CheckParseSuccess("void operator new()", m_any, "operator new, a function taking no parameters, returning `void`", {});
     CheckParseSuccess("void operator new[] ()", m_any, "operator new[], a function taking no parameters, returning `void`", {});
     CheckParseSuccess("void operator new  [  ] ()", m_any, "operator new[], a function taking no parameters, returning `void`", {});

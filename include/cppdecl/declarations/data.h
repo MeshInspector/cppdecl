@@ -1438,17 +1438,26 @@ namespace cppdecl
                 }
             }
 
-            return std::visit(Overload{
+            if (std::visit(Overload{
                 [](std::string &){return false;}, // Nothing here.
                 [&](auto &elem){return elem.template VisitEachComponent<C...>(flags, func);}
-            }, var);
+            }, var))
+            {
+                return true;
+            }
         }
 
         // This uses post-order for consistency with `UnqualifiedName`.
         if constexpr ((std::same_as<C, UnqualifiedName> || ...))
         {
-            if (func(*this))
-                return true;
+            if (
+                !bool(flags & VisitEachComponentFlags::no_visit_nontype_names) ||
+                !bool(flags & VisitEachComponentFlags::this_name_is_nontype)
+            )
+            {
+                if (func(*this))
+                    return true;
+            }
         }
 
         return false;

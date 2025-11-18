@@ -394,7 +394,7 @@ namespace cppdecl
         return "??";
     }
 
-    [[nodiscard]] CPPDECL_CONSTEXPR std::string ToCode(const UnqualifiedName &target, ToCodeFlags flags)
+    [[nodiscard]] CPPDECL_CONSTEXPR std::string ToCode(const UnqualifiedName::Variant &target, ToCodeFlags flags)
     {
         assert(!bool(flags & ToCodeFlags::mask_any_half_type));
         assert(!bool(flags & ToCodeFlags::lambda));
@@ -452,14 +452,24 @@ namespace cppdecl
             {
                 ret += unsp.name;
             },
-        }, target.var);
-
-        if (target.template_args)
-            ret += ToCode(*target.template_args, flags);
+        }, target);
         return ret;
     }
 
-    [[nodiscard]] CPPDECL_CONSTEXPR std::string ToString(const UnqualifiedName &target, ToStringFlags flags)
+    [[nodiscard]] CPPDECL_CONSTEXPR std::string ToCode(const UnqualifiedName &target, ToCodeFlags flags)
+    {
+        assert(!bool(flags & ToCodeFlags::mask_any_half_type));
+        assert(!bool(flags & ToCodeFlags::lambda));
+
+        std::string ret = ToCode(target.var, flags);
+
+        if (target.template_args)
+            ret += ToCode(*target.template_args, flags);
+
+        return ret;
+    }
+
+    [[nodiscard]] CPPDECL_CONSTEXPR std::string ToString(const UnqualifiedName::Variant &target, ToStringFlags flags)
     {
         if (bool(flags & ToStringFlags::identifier))
         {
@@ -525,21 +535,13 @@ namespace cppdecl
                 {
                     ret += KeepOnlyIdentifierChars(unsp.name);
                 },
-            }, target.var);
-
-            if (target.template_args)
-            {
-                std::string targs_str = ToString(*target.template_args, flags);
-                if (!targs_str.empty() && !ret.empty())
-                    ret += '_';
-                ret += targs_str;
-            }
+            }, target);
 
             return ret;
         }
         else if (bool(flags & ToStringFlags::debug))
         {
-            std::string ret = "{";
+            std::string ret;
 
             std::visit(Overload{
                 [&](const std::string &name)
@@ -576,7 +578,7 @@ namespace cppdecl
                 },
                 [&](const NewDeleteOperator &op)
                 {
-                    ret = "new_del_op=`";
+                    ret += "new_del_op=`";
                     switch (op.kind)
                     {
                       case NewDeleteOperator::Kind::new_:
@@ -602,15 +604,8 @@ namespace cppdecl
                     ret += unsp.name;
                     ret += '`';
                 },
-            }, target.var);
+            }, target);
 
-            if (target.template_args)
-            {
-                ret += ",targs=";
-                ret += ToString(*target.template_args, flags);
-            }
-
-            ret += '}';
             return ret;
         }
         else
@@ -677,7 +672,49 @@ namespace cppdecl
                     ret += unsp.name;
                     ret += '`';
                 },
-            }, target.var);
+            }, target);
+
+            return ret;
+        }
+
+        assert(false && "Unknown enum.");
+        return "??";
+    }
+
+    [[nodiscard]] CPPDECL_CONSTEXPR std::string ToString(const UnqualifiedName &target, ToStringFlags flags)
+    {
+        if (bool(flags & ToStringFlags::identifier))
+        {
+            std::string ret = ToString(target.var, flags);
+
+            if (target.template_args)
+            {
+                std::string targs_str = ToString(*target.template_args, flags);
+                if (!targs_str.empty() && !ret.empty())
+                    ret += '_';
+                ret += targs_str;
+            }
+
+            return ret;
+        }
+        else if (bool(flags & ToStringFlags::debug))
+        {
+            std::string ret = "{";
+
+            ret += ToString(target.var, flags);
+
+            if (target.template_args)
+            {
+                ret += ",targs=";
+                ret += ToString(*target.template_args, flags);
+            }
+
+            ret += '}';
+            return ret;
+        }
+        else
+        {
+            std::string ret = ToString(target.var, flags);
 
             if (target.template_args)
             {
