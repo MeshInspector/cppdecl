@@ -172,10 +172,12 @@ namespace cppdecl
     struct StringOrCharLiteral;
     struct TemplateArgumentList;
     struct Type;
+    struct UnqualifiedName;
 
     template <typename T>
     concept VisitableComponentType =
         std::same_as<T, QualifiedName> ||
+        std::same_as<T, UnqualifiedName> ||
         std::same_as<T, CvQualifiers> ||
         std::same_as<T, SimpleType> ||
         std::same_as<T, PunctuationToken> ||
@@ -208,8 +210,6 @@ namespace cppdecl
             return const_cast<TemplateArgumentList &>(*this).VisitEachComponent<C...>(flags, [&func](auto &comp) -> bool {return func(std::as_const(comp));});
         }
     };
-
-    struct UnqualifiedName;
 
     // A qualified name.
     struct QualifiedName
@@ -1442,6 +1442,13 @@ namespace cppdecl
                 [](std::string &){return false;}, // Nothing here.
                 [&](auto &elem){return elem.template VisitEachComponent<C...>(flags, func);}
             }, var);
+        }
+
+        // This uses post-order for consistency with `UnqualifiedName`.
+        if constexpr ((std::same_as<C, UnqualifiedName> || ...))
+        {
+            if (func(*this))
+                return true;
         }
 
         return false;
