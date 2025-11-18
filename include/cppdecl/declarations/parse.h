@@ -301,7 +301,6 @@ namespace cppdecl
                         TryExactString("<unnamed union>") || // ^
                         TryExactString("<unnamed enum>") || // ^
                         TryExactString("'unnamed'") || // GCC+llvm-cxxfilt (struct/class/union/enum)
-                        TryExactString("'lambda'") || // ^
                         TryExactString("`anonymous-namespace'") || // MSVC, __FUNCSIG__
                         TryExactString("`anonymous namespace'") || // MSVC, typeid
                         TryExactString("(anonymous namespace)") || // Clang (both typeid and __PRETTY_FUNCTION__), c++filt, llvm-cxxfilt
@@ -370,6 +369,7 @@ namespace cppdecl
 
                         found =
                             TryStringWithId("<lambda", true, "", IdKind::none, ">", false) || // `<lambda(int)>` GCC, __PRETTY_FUNCTION__
+                            TryStringWithId("'lambda'", true, "", IdKind::none, "", false) || // `'lambda'(int)` GCC+llvm-cxxfilt
                             TryStringWithId("{unnamed type#", false, "", IdKind::number, "}", false) || // `{unnamed type#1}`, GCC, typeid
                             TryStringWithId("{lambda", true, "#", IdKind::number, "}", false) || // `{lambda(int)#1}`, ^
                             TryStringWithId("<unnamed-type-", false, "", IdKind::identifier, ">", false) || // `<unnamed-type-blah>`, MSVC, both __PRETTY_FUNCTION__ and typeid

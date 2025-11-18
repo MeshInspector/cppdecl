@@ -1851,7 +1851,8 @@ int main()
     TestUnspellableType("<lambda_1>"); // ^
     TestUnspellableType("<lambda_42>"); // ^
     TestUnspellableType("'unnamed'"); // GCC+llvm-cxxfilt
-    TestUnspellableType("'lambda'"); // ^
+    TestUnspellableType("'lambda'()"); // ^
+    TestUnspellableType("'lambda'(int, const std::vector<int> *)"); // ^
     TestUnspellableType("$_0"); // Clang, typeid, both lambdas and struct/class/union/enum
     TestUnspellableType("$_42"); // ^
 
@@ -1865,8 +1866,8 @@ int main()
     // How spaces before `*` and `&` are inserted:
     CheckTypeRoundtrip("<lambda_1> *", "<lambda_1> *");
     CheckTypeRoundtrip("<lambda_1> &", "<lambda_1> &");
-    CheckTypeRoundtrip("'lambda' *", "'lambda' *");
-    CheckTypeRoundtrip("'lambda' &", "'lambda' &");
+    CheckTypeRoundtrip("'unnamed' *", "'unnamed' *");
+    CheckTypeRoundtrip("'unnamed' &", "'unnamed' &");
     CheckTypeRoundtrip("{lambda()#1} *", "{lambda()#1} *");
     CheckTypeRoundtrip("{lambda()#1} &", "{lambda()#1} &");
     CheckTypeRoundtrip("(anonymous) *", "(anonymous) *");
