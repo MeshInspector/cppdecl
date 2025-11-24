@@ -1856,6 +1856,11 @@ int main()
     TestUnspellableType("$_0"); // Clang, typeid, both lambdas and struct/class/union/enum
     TestUnspellableType("$_42"); // ^
 
+    TestUnspellableType("(anonymous class)"); // Seen in Clang 18 errors.
+    TestUnspellableType("(anonymous struct)"); // I haven't actually seen this, but I assume it's a thing, see above.
+    TestUnspellableType("(anonymous union)"); // ^
+    TestUnspellableType("(anonymous enum)"); // ^
+
     // Anonymous namespaces:
     TestUnspellableType("`anonymous-namespace'"); // MSVC, __FUNCSIG__
     TestUnspellableType("`anonymous namespace'"); // MSVC, typeid

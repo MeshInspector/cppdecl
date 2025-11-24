@@ -305,6 +305,10 @@ namespace cppdecl
                         TryExactString("`anonymous namespace'") || // MSVC, typeid
                         TryExactString("(anonymous namespace)") || // Clang (both typeid and __PRETTY_FUNCTION__), c++filt, llvm-cxxfilt
                         TryExactString("(anonymous)") || // Older Clang?
+                        TryExactString("(anonymous class)") || // Seen in Clang 18 errors.
+                        TryExactString("(anonymous struct)") || // I haven't actually seen this, but I assume it's a thing, see above.
+                        TryExactString("(anonymous union)") || // ^
+                        TryExactString("(anonymous enum)") || // ^
                         TryExactString("{anonymous}"); // GCC, __PRETTY_FUNCTION__
 
                     if (!found)
