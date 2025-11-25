@@ -392,6 +392,7 @@ namespace cppdecl
     // Has special handling for `[]` and `{}` to help with `operator[]`, `operator()`.
     // If the token is unknown, either returns empty (if `assert_and_fallback_if_unknown == false`),
     //   or returns `"unknown"` and raises an assertion in debug builds (if `assert_and_fallback_if_unknown == true`).
+    // Here for operators we prefer their binary names as opposed to unary.
     [[nodiscard]] constexpr std::string_view TokenToIdentifier(std::string_view token, bool assert_and_fallback_if_unknown)
     {
         // Those are the overloaded operators.
