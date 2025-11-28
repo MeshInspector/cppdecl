@@ -526,10 +526,10 @@ namespace cppdecl
         template <typename T> [[nodiscard]] CPPDECL_CONSTEXPR       T *As(std::size_t i = 0);
         template <typename T> [[nodiscard]] CPPDECL_CONSTEXPR const T *As(std::size_t i = 0) const;
 
-        // Returns true if this is const-qualified (at the top level by default, if `i == 0`).
+        // Returns true if this type is const-qualified (at the top level by default, if `i == 0`).
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsConst(std::size_t i = 0) const;
-        // Returns true if this is const-qualified or a reference (at the top level by default, if `i == 0`).
-        [[nodiscard]] CPPDECL_CONSTEXPR bool IsConstOrReference(std::size_t i = 0) const;
+        // Returns true if this type is const-qualified, or a reference, or a (possibly n-dimensional) array with const element type (at the top level by default, if `i == 0`).
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsEffectivelyConst(std::size_t i = 0) const;
 
         // Returns the qualifiers of the `i`th modifier in `modifiers`, or those of `simple_type` if `i == modifiers.size()`.
         // `i == 0` effectively returns the top-level qualifiers.
@@ -1188,6 +1188,19 @@ namespace cppdecl
             return *this == target;
         }
 
+        // Try to get array size. Returns `size` isn't a single number token that we can parse.
+        // Also returns null for arrays of unknown bound (those have `size.empty()`).
+        template <std::unsigned_integral T = std::uint64_t>
+        [[nodiscard]] std::optional<T> GetSize() const
+        {
+            if (size.tokens.size() != 1)
+                return {};
+            auto lit = std::get_if<NumericLiteral>(&size.tokens.front());
+            if (!lit)
+                return {};
+            return lit->ToInteger<T>();
+        }
+
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)       {return size.VisitEachComponent<C...>(flags, func);}
         template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func) const {return size.VisitEachComponent<C...>(flags, func);}
@@ -1795,8 +1808,11 @@ namespace cppdecl
         return bool(GetQualifiers(i) & CvQualifiers::const_);
     }
 
-    CPPDECL_CONSTEXPR bool Type::IsConstOrReference(std::size_t i) const
+    CPPDECL_CONSTEXPR bool Type::IsEffectivelyConst(std::size_t i) const
     {
+        // Skip all array extents.
+        while (Is<cppdecl::Array>(i))
+            i++;
         return IsConst(i) || Is<Reference>(i);
     }
 
