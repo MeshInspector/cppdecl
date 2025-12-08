@@ -478,7 +478,17 @@ namespace cppdecl
             std::visit(Overload{
                 [&](const std::string &name)
                 {
-                    ret = KeepOnlyIdentifierChars(name);
+                    // We could use `KeepOnlyIdentifierChars()` here, but right now we intentionally don't.
+                    // Normally `name` should already satisfy this condition, but sometimes the user might want to inject some custom markers into it,
+                    //   and we don't want to erase them here.
+                    ret = name;
+
+                    // But because of this, we still need to replace spaces in something like `long long`.
+                    for (char &ch : ret)
+                    {
+                        if (ch == ' ')
+                            ch = '_';
+                    }
                 },
                 [&](const OverloadedOperator &op)
                 {

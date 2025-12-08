@@ -887,6 +887,9 @@ int main()
     CheckParseSuccess("int *(int, float x) &&",                m_any, "int_ptr_func_from_int_float_x_rvalue", cppdecl::ToStringFlags::identifier);
     CheckParseSuccess("int *(int, float x) const &",           m_any, "int_ptr_func_from_int_float_x_const_lvalue", cppdecl::ToStringFlags::identifier);
 
+    // We want to preserve custom characters if they were forcefully added to a name, in case the user needs them for something.
+    CheckActualEqualsExpected("", cppdecl::ToString(cppdecl::UnqualifiedName{.var = "hello\1world", .template_args = {}}, cppdecl::ToStringFlags::identifier), "hello\1world");
+
 
     // Operators `new` and `delete`.
     CheckParseSuccess("void operator new()", m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{new_del_op=`new`}]}"})");
