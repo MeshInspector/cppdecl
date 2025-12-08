@@ -452,6 +452,8 @@ int main()
     // Currently we make no attempt to handle this.
     CheckParseFail("T<x < y>", m_any, 1, "Unterminated template argument list.");
     CheckParseFail("T<(x < y)>", m_any, 8, "Expected `>` or `,` in template argument list.");
+    // We made this one work, though.
+    CheckParseSuccess("T<x << y>", m_any, "unnamed of type `T` with 1 template argument: [non-type: [`x`, punctuation `<<`, `y`]]", {});
 
 
     // Expressions.

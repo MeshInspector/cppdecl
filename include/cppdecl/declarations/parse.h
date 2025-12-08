@@ -2731,7 +2731,9 @@ namespace cppdecl
 
         TrimLeadingWhitespace(input);
         const std::string_view input_before_list = input;
-        if (!ConsumePunctuation(input, "<"))
+
+        // Notice that we reject `<<` here. This helps parse pseudo-expressions with `<<` in them.
+        if (input.starts_with("<<") || !ConsumePunctuation(input, "<"))
             return ret; // No argument list here, return nullopt.
 
         TemplateArgumentList &ret_list = std::get<std::optional<TemplateArgumentList>>(ret).emplace();
