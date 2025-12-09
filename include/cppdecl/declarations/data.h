@@ -785,7 +785,7 @@ namespace cppdecl
             };
             // Either one of the built-in literal suffixes, or a custom string.
             // No suffix is stored as an empty string. This also helps us work around the Clang quirk with default member initializers in the first member of a variant.
-            std::variant<std::string, Suffix> suffix;
+            std::variant<std::string, Suffix> suffix{};
 
             CPPDECL_EQUALITY_DECLARE(Integer)
         };
@@ -820,7 +820,7 @@ namespace cppdecl
             };
             // Either one of the built-in literal suffixes, or a custom string.
             // No suffix is stored as an empty string, for consistency with `Integer` (see above).
-            std::variant<std::string, Suffix> suffix;
+            std::variant<std::string, Suffix> suffix{};
 
             CPPDECL_EQUALITY_DECLARE(FloatingPoint)
         };
