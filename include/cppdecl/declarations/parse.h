@@ -2076,7 +2076,9 @@ namespace cppdecl
             [[maybe_unused]] constexpr int ret = -1;
 
 
-            // Returns a message saying "X must be a function" for the kind of `ret_decl.name`. Or null if it's a plain name or empty.
+            // If this `ret_decl.name` looks like it must be a function, then returns a message saying "X must be a function",
+            //   where X describes the kind of entity represented by `ret_decl.name`.
+            // Otherwise returns null.
             auto MakeMustBeAFunctionError = [&]() -> const char *
             {
                 if (ret_decl.name.parts.empty())
@@ -2120,16 +2122,6 @@ namespace cppdecl
                 }
 
                 ret_decl.name = std::move(name);
-
-                // Complain if this should be a function (because it's an operator or something like that) but already isn't one.
-                if (!declarator_stack.empty() || !ret_decl.type.modifiers.empty())
-                {
-                    if (auto error = MakeMustBeAFunctionError())
-                    {
-                        input = input_before_candidate_decl_name;
-                        return ParseError{.message = error};
-                    }
-                }
 
                 // Complain if this should return an empty type but doesn't.
                 // This isn't a strict check, we can miss something. (E.g. `int MyClass()` is a constructor,
@@ -2208,10 +2200,21 @@ namespace cppdecl
 
                 bool done = std::visit([&]<typename T>(T &elem)
                 {
-                    // Check for illegal modifier combinations.
-                    // Here we only check the modifiers that appear to the left of the name.
-                    if (!ret_decl.type.modifiers.empty())
+                    if (ret_decl.type.modifiers.empty())
                     {
+                        // Complain if this isn't a function, but should be one.
+                        // This only checks the modifiers that appear to the left of the name.
+                        if (auto error = MakeMustBeAFunctionError())
+                        {
+                            out_error = ParseError{.message = error};
+                            input = this_elem.location;
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        // Check for illegal modifier combinations.
+                        // Here we only check the modifiers that appear to the left of the name.
                         if (std::holds_alternative<Reference>(this_elem.var))
                         {
                             if (std::holds_alternative<Pointer>(ret_decl.type.modifiers.back().var))
@@ -2278,11 +2281,21 @@ namespace cppdecl
                         continue;
                     }
 
+                    // An array?
                     if (ConsumePunctuation(input, "["))
                     {
-                        // Check for banned element type modifiers.
-                        if (!ret_decl.type.modifiers.empty())
+                        if (ret_decl.type.modifiers.empty())
                         {
+                            // Complain if this isn't a function, but should be one.
+                            if (auto error = MakeMustBeAFunctionError())
+                            {
+                                input = input_before_modifier;
+                                return ParseError{.message = error};
+                            }
+                        }
+                        else
+                        {
+                            // Check for banned element type modifiers.
                             if (std::holds_alternative<Function>(ret_decl.type.modifiers.back().var))
                             {
                                 input = input_before_modifier;
@@ -2313,6 +2326,7 @@ namespace cppdecl
                         continue;
                     }
 
+                    // A function?
                     if (ConsumePunctuation(input, "("))
                     {
                         // Check for banned return type modifiers.
@@ -2529,15 +2543,33 @@ namespace cppdecl
             }
 
             // Comsume the rest of the declarator stack.
-            while (declarator_stack_pos != 0)
+            if (declarator_stack_pos != 0)
             {
-                std::optional<ParseError> error;
-                bool found_open_paren = PopDeclaratorFromStack(error);
-                if (error)
-                    return *error;
+                do
+                {
+                    std::optional<ParseError> error;
+                    bool found_open_paren = PopDeclaratorFromStack(error);
+                    if (error)
+                        return *error;
 
-                if (found_open_paren)
-                    return ParseError{.message = "Expected `)`."}; // This always closes a grouping `(...)` in a declarator (not a function parameter list or anything like that).
+                    if (found_open_paren)
+                        return ParseError{.message = "Expected `)`."}; // This always closes a grouping `(...)` in a declarator (not a function parameter list or anything like that).
+                }
+                while (declarator_stack_pos != 0);
+            }
+            else
+            {
+                // Complain if this isn't a function, but should be one.
+                // Here we only handle the complete lack of modifiers.
+                // If there is a modifier, it's handled when parsed, and the error message points to that modifier, which is nice.
+                if (ret_decl.type.modifiers.empty())
+                {
+                    if (auto error = MakeMustBeAFunctionError())
+                    {
+                        input = input_before_candidate_decl_name;
+                        return ParseError{.message = error};
+                    }
+                }
             }
 
 

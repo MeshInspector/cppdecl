@@ -534,6 +534,18 @@ int main()
     // Overloaded operator.
     CheckParseSuccess("void A::operator++()",                  m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{name="A"},{op=`++`}]}"})");
     CheckParseSuccess("  void  A  ::  operator  ++  (  )  ",   m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{name="A"},{op=`++`}]}"})");
+    // Check the "overloaded operator must be a function" logic:
+    CheckParseFail("int operator<<", m_any, 4, "Overloaded operator must be a function.");
+    CheckParseFail("int *operator<<", m_any, 4, "Overloaded operator must be a function.");
+    CheckParseFail("int **operator<<", m_any, 5, "Overloaded operator must be a function."); // Note that the error points to the last `*`! This is so cool.
+    CheckParseFail("int &operator<<", m_any, 4, "Overloaded operator must be a function.");
+    CheckParseFail("int A::*operator<<", m_any, 4, "Overloaded operator must be a function.");
+    CheckParseFail("int operator<<[42]", m_any, 14, "Overloaded operator must be a function.");
+    CheckParseFail("int (*operator<<)()", m_any, 5, "Expected a type."); // This gets parsed as `int(params...)`, since this error appears later than the "must be a function" one.
+    CheckParseFail("int (*operator<<)()", m_named, 5, "Overloaded operator must be a function."); // If we force a named declaration, it errors properly.
+    CheckParseSuccess("int *operator<<()", m_any, "overloaded operator `<<`, a function taking no parameters, returning a pointer to `int`", {});
+    CheckParseSuccess("std::ostream &operator<<()", m_any, "overloaded operator `<<`, a function taking no parameters, returning an lvalue reference to `std`::`ostream`", {});
+
     // Overloaded operator `()`. This is special, it can have whitespace between the `()`.
     CheckParseSuccess("void A::operator()()",                  m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{name="A"},{op=`()`}]}"})");
     CheckParseSuccess("  void  A  ::  operator  (  )  (  )  ", m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{name="A"},{op=`()`}]}"})");
@@ -592,25 +604,25 @@ int main()
     CheckParseFail("  void  A  ::  operator  @",               m_any, 25, "Expected a type.");
 
     // Conversion operator.
-    CheckParseSuccess("A::operator int",                       m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
-    CheckParseSuccess("A::operator int*&",                     m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`lvalue reference to pointer to {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
-    CheckParseSuccess("A::operator int A::*B::*",              m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`pointer-to-member of class {global_scope=false,parts=[{name="B"}]} of type pointer-to-member of class {global_scope=false,parts=[{name="A"}]} of type {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
     CheckParseSuccess("A::operator int()",                     m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
     CheckParseSuccess("A::operator int*&()",                   m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`lvalue reference to pointer to {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
     CheckParseSuccess("A::operator int A::*B::*()",            m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`pointer-to-member of class {global_scope=false,parts=[{name="B"}]} of type pointer-to-member of class {global_scope=false,parts=[{name="A"}]} of type {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
     CheckParseSuccess("A::operator int  ()",                   m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
     CheckParseSuccess("A::operator int*&  ()",                 m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`lvalue reference to pointer to {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
     CheckParseSuccess("A::operator int A::*B::*  ()",          m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`pointer-to-member of class {global_scope=false,parts=[{name="B"}]} of type pointer-to-member of class {global_scope=false,parts=[{name="A"}]} of type {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
+    CheckParseSuccess("A::operator int(int)",                  m_any, R"({type="a function taking 1 parameter: [{type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}",name="{global_scope=false,parts=[]}"}], returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
+    CheckParseSuccess("A::operator int*&(int)",                m_any, R"({type="a function taking 1 parameter: [{type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}",name="{global_scope=false,parts=[]}"}], returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`lvalue reference to pointer to {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
+    CheckParseSuccess("A::operator int A::*B::*(int)",         m_any, R"({type="a function taking 1 parameter: [{type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}",name="{global_scope=false,parts=[]}"}], returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{conv=`pointer-to-member of class {global_scope=false,parts=[{name="B"}]} of type pointer-to-member of class {global_scope=false,parts=[{name="A"}]} of type {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
     // Conversion operators don't allow any `(` in the type.
     CheckParseFail("A::operator int(*)",                       m_any, 16, "Expected a type.");
     // Conversion operators don't allow any right-side declarators.
-    // Because of that, this parses to a variable named `A::operator int` of type `int [42]`. Weird, but not our job to police?
-    CheckParseFail("A::operator int[42]",                      m_any, 15, "Assumed this was a function declaration with an empty return type, but found an array.");
+    // Because of that, this parses to a variable named `A::operator int` of type `int [42]`, which we now reject.
+    CheckParseFail("A::operator int[42]",                      m_any, 15, "Conversion operator must be a function.");
 
     // Destructors.
     CheckParseSuccess("~A()",                                  m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{dtor=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="A"}]}}`}]}"})");
     CheckParseSuccess("~A()",                                  m_any, "destructor for type [`A`], a destructor taking no parameters", cppdecl::ToStringFlags{});
-    CheckParseSuccess("~A",                                    m_any, "destructor for type [`A`]", cppdecl::ToStringFlags{});
+    CheckParseFail("~A",                                       m_any, 0, "Destructor must be a function.");
     CheckParseSuccess("A::~B()",                               m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{dtor=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="B"}]}}`}]}"})");
     // Notably the destructor types can't contain `::` (after `~`), so here the destructor component is only `~A` itself.
     CheckParseSuccess("int ~A::B()",                           m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}",name="{global_scope=false,parts=[{dtor=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="A"}]}}`},{name="B"}]}"})");
@@ -653,8 +665,7 @@ int main()
     CheckParseFail("operator A::operator+()",                  m_any, 9, "Expected a type.");
     CheckParseFail("operator A::operator\"\"_blah()",          m_any, 9, "Expected a type.");
 
-    CheckParseSuccess("A::~A",                                 m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{dtor=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="A"}]}}`}]}"})");
-    CheckParseSuccess("A::~A",                                 m_any, "`A`::destructor for type [`A`]", cppdecl::ToStringFlags{});
+    CheckParseSuccess("A::~A()",                               m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{name="A"},{dtor=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="A"}]}}`}]}"})");
     CheckParseSuccess("A::~A()",                               m_any, "`A`::destructor for type [`A`], a destructor taking no parameters", cppdecl::ToStringFlags{});
     CheckParseFail("X A::~A",                                  m_any, 2, "A destructor must have no return type.");
     CheckParseFail("X A::~A()",                                m_any, 2, "A destructor must have no return type.");
@@ -673,8 +684,8 @@ int main()
 
     CheckParseFail("  long()",                                 m_any | cppdecl::ParseDeclFlags::force_empty_return_type, 2, "Expected a name.");
 
-    CheckParseSuccess("operator int",                          m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{conv=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
-    CheckParseSuccess("operator int",                          m_any, "conversion operator to [`int`]", cppdecl::ToStringFlags{});
+    CheckParseSuccess("operator int()",                        m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[]}}",name="{global_scope=false,parts=[{conv=`{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}`}]}"})");
+    CheckParseSuccess("operator int()",                        m_any, "conversion operator to [`int`], a function taking no parameters, returning nothing", cppdecl::ToStringFlags{});
 
     CheckParseSuccess("A()",                                   m_any, "ambiguous, either [unnamed function taking no parameters, returning `A`] or [`A`, a constructor taking no parameters]", cppdecl::ToStringFlags{});
     CheckParseSuccess("A()",                                   m_any | cppdecl::ParseDeclFlags::force_non_empty_return_type, "unnamed function taking no parameters, returning `A`", cppdecl::ToStringFlags{});
@@ -706,9 +717,9 @@ int main()
     CheckParseFail("  operator+  [42]  ",                      m_named | cppdecl::ParseDeclFlags::force_non_empty_return_type, 2, "Expected a type.");
     CheckParseFail("  operator+  [42]  ",                      m_named, 2, "Expected a type.");
 
-    CheckParseFail("  operator int  [42]  ",                   m_named | cppdecl::ParseDeclFlags::force_empty_return_type, 16, "Assumed this was a function declaration with an empty return type, but found an array.");
+    CheckParseFail("  operator int  [42]  ",                   m_named | cppdecl::ParseDeclFlags::force_empty_return_type, 16, "Conversion operator must be a function.");
     CheckParseFail("  operator int  [42]  ",                   m_named | cppdecl::ParseDeclFlags::force_non_empty_return_type, 2, "Expected a type.");
-    CheckParseFail("  operator int  [42]  ",                   m_named, 16, "Assumed this was a function declaration with an empty return type, but found an array.");
+    CheckParseFail("  operator int  [42]  ",                   m_named, 16, "Conversion operator must be a function.");
 
 
     // Banning literal keywords from qualified names.
@@ -896,15 +907,15 @@ int main()
     // Operators `new` and `delete`.
     CheckParseSuccess("void operator new()", m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{new_del_op=`new`}]}"})");
     CheckParseSuccess("void operator new()", m_any, "operator new, a function taking no parameters, returning `void`", {});
-    CheckParseSuccess("void operator new[] ()", m_any, "operator new[], a function taking no parameters, returning `void`", {});
-    CheckParseSuccess("void operator new  [  ] ()", m_any, "operator new[], a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator new[]()", m_any, "operator new[], a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator new  [  ]  ()", m_any, "operator new[], a function taking no parameters, returning `void`", {});
     CheckParseSuccess("void operator delete()", m_any, "operator delete, a function taking no parameters, returning `void`", {});
-    CheckParseSuccess("void operator delete[] ()", m_any, "operator delete[], a function taking no parameters, returning `void`", {});
-    CheckParseSuccess("void operator delete  [  ] ()", m_any, "operator delete[], a function taking no parameters, returning `void`", {});
-    CheckParseSuccess("void operator new", m_any, "void_operator_new", cppdecl::ToStringFlags::identifier);
-    CheckParseSuccess("void operator new[]", m_any, "void_operator_new_array", cppdecl::ToStringFlags::identifier);
-    CheckParseSuccess("void operator delete", m_any, "void_operator_delete", cppdecl::ToStringFlags::identifier);
-    CheckParseSuccess("void operator delete[]", m_any, "void_operator_delete_array", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void operator delete[]()", m_any, "operator delete[], a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator delete  [  ]  ()", m_any, "operator delete[], a function taking no parameters, returning `void`", {});
+    CheckParseSuccess("void operator new()", m_any, "void_func_operator_new", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void operator new[]()", m_any, "void_func_operator_new_array", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void operator delete()", m_any, "void_func_operator_delete", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void operator delete[]()", m_any, "void_func_operator_delete_array", cppdecl::ToStringFlags::identifier);
 
 
     // MSVC pointer annotations.
