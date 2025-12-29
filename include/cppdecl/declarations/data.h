@@ -1188,6 +1188,9 @@ namespace cppdecl
             return *this == target;
         }
 
+        // Returns true if this is an array of unknown bound, i.e. `T[]` as opposed to `T[N]`.
+        [[nodiscard]] bool IsUnbounded() const {return size.IsEmpty();}
+
         // Try to get array size. Returns `size` isn't a single number token that we can parse.
         // Also returns null for arrays of unknown bound (those have `size.empty()`).
         template <std::unsigned_integral T = std::uint64_t>
