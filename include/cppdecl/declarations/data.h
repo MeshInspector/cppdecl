@@ -51,7 +51,7 @@ namespace cppdecl
     };
     CPPDECL_FLAG_OPERATORS(VisitEachComponentFlags)
 
-    enum class IsBuiltInTypeNameFlags
+    enum class IsBuiltInTypeFlags
     {
         allow_void = 1 << 0,
         allow_integral = 1 << 1, // This excludes `bool`, which has a separate flag.
@@ -61,7 +61,7 @@ namespace cppdecl
         allow_arithmetic = allow_integral | allow_bool | allow_floating_point,
         allow_all = allow_void | allow_arithmetic,
     };
-    CPPDECL_FLAG_OPERATORS(IsBuiltInTypeNameFlags)
+    CPPDECL_FLAG_OPERATORS(IsBuiltInTypeFlags)
 
 
     // Cv-qualifiers, and/or `__restrict`.
@@ -152,11 +152,14 @@ namespace cppdecl
         ignore_const = 1 << 3,
         // Require const and reject non-const types.
         require_const = 1 << 4,
-
         // ] -- Use at most one of those.
 
-        ignore_unsigned = 1 << 5,
+        // Use at most one of those: [
+
+        ignore_signed_unsigned = 1 << 5,
+        // Ignored if `ignore_signed_unsigned` is also specified.
         require_unsigned = 1 << 6,
+        // ] -- Use at most one of those.
 
         // ] -- Those don't make sense on `QualifiedName`s.
     };
@@ -297,7 +300,7 @@ namespace cppdecl
         // If there's only one part and no `::` forcing the global scope,
         //   calls the same method on that (see `UnqualifiedName::IsBuiltInTypeName()` for details).
         // Otherwise returns false.
-        [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInTypeName(IsBuiltInTypeNameFlags flags = IsBuiltInTypeNameFlags::allow_all) const;
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInTypeName(IsBuiltInTypeFlags flags = IsBuiltInTypeFlags::allow_all) const;
 
         // Visit this instance, and all instances of any of `C...` nested in it. `func` is `(auto &name) -> void`.
         // Note! We can have other names nested in this, so you can't just call the function on it directly.
@@ -401,7 +404,7 @@ namespace cppdecl
                 (bool(word_flags & SingleWordFlags::ignore_type_prefixes) || prefix == SimpleTypePrefix{}) &&
                 (
                     // Here `implied_int` is ignored always, for sanity.
-                    bool(word_flags & SingleWordFlags::ignore_unsigned) ? (flags & ~(SimpleTypeFlags::implied_int | SimpleTypeFlags::unsigned_)) == SimpleTypeFlags{} :
+                    bool(word_flags & SingleWordFlags::ignore_signed_unsigned) ? (flags & ~(SimpleTypeFlags::implied_int | SimpleTypeFlags::unsigned_ | SimpleTypeFlags::explicitly_signed)) == SimpleTypeFlags{} :
                     bool(word_flags & SingleWordFlags::require_unsigned) ? (flags & ~SimpleTypeFlags::implied_int) == SimpleTypeFlags::unsigned_ :
                     (flags & ~SimpleTypeFlags::implied_int) == SimpleTypeFlags{}
                 );
@@ -428,6 +431,8 @@ namespace cppdecl
         {
             return bool(flags & SimpleTypeFlags::explicitly_signed) && name.AsSingleWord() == "char";
         }
+
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInType(IsBuiltInTypeFlags flags = IsBuiltInTypeFlags::allow_all) const;
 
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitEachComponentFlags flags, auto &&func)
@@ -530,6 +535,8 @@ namespace cppdecl
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsConst(std::size_t i = 0) const;
         // Returns true if this type is const-qualified, or a reference, or a (possibly n-dimensional) array with const element type (at the top level by default, if `i == 0`).
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsEffectivelyConst(std::size_t i = 0) const;
+
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInType(IsBuiltInTypeFlags flags = IsBuiltInTypeFlags::allow_all) const;
 
         // Returns the qualifiers of the `i`th modifier in `modifiers`, or those of `simple_type` if `i == modifiers.size()`.
         // `i == 0` effectively returns the top-level qualifiers.
@@ -715,7 +722,7 @@ namespace cppdecl
         // But signedness and constness isn't handled here, for that we have `SimpleTypeFlags`.
         // We don't really want to permit the `double long` spelling, and our parser shouldn't emit it, but keeping it here just in case
         //   the user manually sets it, or something?
-        [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInTypeName(IsBuiltInTypeNameFlags flags = IsBuiltInTypeNameFlags::allow_all) const;
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInTypeName(IsBuiltInTypeFlags flags = IsBuiltInTypeFlags::allow_all) const;
 
         // Could this be a type name, when used alone or as the last part of a qualified name.
         [[nodiscard]] CPPDECL_CONSTEXPR bool CouldBeType() const;
@@ -1406,7 +1413,7 @@ namespace cppdecl
             return "";
     }
 
-    CPPDECL_CONSTEXPR bool UnqualifiedName::IsBuiltInTypeName(IsBuiltInTypeNameFlags flags) const
+    CPPDECL_CONSTEXPR bool UnqualifiedName::IsBuiltInTypeName(IsBuiltInTypeFlags flags) const
     {
         std::string_view word = AsSingleWord();
         if (word.empty())
@@ -1414,13 +1421,13 @@ namespace cppdecl
 
         // See the comment on this function for more information.
 
-        if (bool(flags & IsBuiltInTypeNameFlags::allow_void) && IsTypeNameKeywordVoid(word))
+        if (bool(flags & IsBuiltInTypeFlags::allow_void) && IsTypeNameKeywordVoid(word))
             return true;
-        if (bool(flags & IsBuiltInTypeNameFlags::allow_integral) && (IsTypeNameKeywordIntegral(word) || word == "long long"))
+        if (bool(flags & IsBuiltInTypeFlags::allow_integral) && (IsTypeNameKeywordIntegral(word) || word == "long long"))
             return true;
-        if (bool(flags & IsBuiltInTypeNameFlags::allow_bool) && IsTypeNameKeywordBool(word))
+        if (bool(flags & IsBuiltInTypeFlags::allow_bool) && IsTypeNameKeywordBool(word))
             return true;
-        if (bool(flags & IsBuiltInTypeNameFlags::allow_floating_point) && (IsTypeNameKeywordFloatingPoint(word) || word == "long double" || word == "double long"))
+        if (bool(flags & IsBuiltInTypeFlags::allow_floating_point) && (IsTypeNameKeywordFloatingPoint(word) || word == "long double" || word == "double long"))
             return true;
 
         return false;
@@ -1665,7 +1672,7 @@ namespace cppdecl
             return {};
     }
 
-    CPPDECL_CONSTEXPR bool QualifiedName::IsBuiltInTypeName(IsBuiltInTypeNameFlags flags) const
+    CPPDECL_CONSTEXPR bool QualifiedName::IsBuiltInTypeName(IsBuiltInTypeFlags flags) const
     {
         if (!force_global_scope && parts.size() == 1)
             return parts.front().IsBuiltInTypeName(flags);
@@ -1748,6 +1755,13 @@ namespace cppdecl
         return ret;
     }
 
+    CPPDECL_CONSTEXPR bool SimpleType::IsBuiltInType(IsBuiltInTypeFlags flags) const
+    {
+        if (!IsOnlyQualifiedName(SingleWordFlags::ignore_cv_qualifiers | SingleWordFlags::ignore_type_prefixes | SingleWordFlags::ignore_cv_qualifiers))
+            return false;
+        return name.IsBuiltInTypeName(flags);
+    }
+
     CPPDECL_EQUALITY_DEFINE(SimpleType)
 
     CPPDECL_CONSTEXPR Type Type::FromSingleWord(std::string part)
@@ -1817,6 +1831,11 @@ namespace cppdecl
         while (Is<cppdecl::Array>(i))
             i++;
         return IsConst(i) || Is<Reference>(i);
+    }
+
+    CPPDECL_CONSTEXPR bool Type::IsBuiltInType(IsBuiltInTypeFlags flags) const
+    {
+        return modifiers.empty() && simple_type.IsBuiltInType(flags);
     }
 
     CPPDECL_CONSTEXPR CvQualifiers Type::GetQualifiers(std::size_t i) const

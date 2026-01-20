@@ -769,7 +769,7 @@ namespace cppdecl
                 return ParseError{.message = "Repeated `unsigned`."};
             if (bool(type.flags & SimpleTypeFlags::explicitly_signed))
                 return ParseError{.message = "Both `signed` and `unsigned` on the same type."};
-            if (!type.name.IsEmpty() && !type.name.IsBuiltInTypeName(IsBuiltInTypeNameFlags::allow_integral))
+            if (!type.name.IsEmpty() && !type.name.IsBuiltInTypeName(IsBuiltInTypeFlags::allow_integral))
                 return ParseError{.message = "Can only apply `unsigned` directly to built-in integral types."}; // Yes, you can't use it on a typedef.
             type.flags |= SimpleTypeFlags::unsigned_;
             return true;
@@ -780,7 +780,7 @@ namespace cppdecl
                 return ParseError{.message = "Repeated `signed`."};
             if (bool(type.flags & SimpleTypeFlags::unsigned_))
                 return ParseError{.message = "Both `unsigned` and `signed` on the same type."};
-            if (!type.name.IsEmpty() && !type.name.IsBuiltInTypeName(IsBuiltInTypeNameFlags::allow_integral))
+            if (!type.name.IsEmpty() && !type.name.IsBuiltInTypeName(IsBuiltInTypeFlags::allow_integral))
                 return ParseError{.message = "Can only apply `signed` directly to built-in integral types."}; // Yes, you can't use it on a typedef.
             type.flags |= SimpleTypeFlags::explicitly_signed;
             return true;
@@ -792,7 +792,7 @@ namespace cppdecl
             if (bool(type.flags & SimpleTypeFlags::c_imaginary))
                 return ParseError{.message = "Both `_Imaginary` and `_Complex` on the same type."};
             // Note that we have to allow `long _Complex` here in case it then becomes `long _Complex double`. We make sure we got a `double` later.
-            if (!type.name.IsEmpty() && !type.name.IsBuiltInTypeName(IsBuiltInTypeNameFlags::allow_floating_point) && type.name.AsSingleWord() != "long")
+            if (!type.name.IsEmpty() && !type.name.IsBuiltInTypeName(IsBuiltInTypeFlags::allow_floating_point) && type.name.AsSingleWord() != "long")
                 return ParseError{.message = "Can only apply `_Complex` directly to built-in floating-point types."}; // Yes, you can't use it on a typedef.
             type.flags |= SimpleTypeFlags::c_complex;
             return true;
@@ -804,7 +804,7 @@ namespace cppdecl
             if (bool(type.flags & SimpleTypeFlags::c_complex))
                 return ParseError{.message = "Both `_Complex` and `_Imaginary` on the same type."};
             // Note that we have to allow `long _Complex` here in case it then becomes `long _Complex double`. We make sure we got a `double` later.
-            if (!type.name.IsEmpty() && !type.name.IsBuiltInTypeName(IsBuiltInTypeNameFlags::allow_floating_point) && type.name.AsSingleWord() != "long")
+            if (!type.name.IsEmpty() && !type.name.IsBuiltInTypeName(IsBuiltInTypeFlags::allow_floating_point) && type.name.AsSingleWord() != "long")
                 return ParseError{.message = "Can only apply `_Imaginary` directly to built-in floating-point types."}; // Yes, you can't use it on a typedef.
             type.flags |= SimpleTypeFlags::c_imaginary;
             return true;
@@ -869,10 +869,10 @@ namespace cppdecl
             // Handle `[un]signed` + something other than a builtin integral type.
             // This is a SOFT error because `signed A;` is a variable declaration.
             // Note that the reverse (`A signed;`), which is handled above, is a HARD error (I don't see any usecase where it needs to be soft).
-            if (bool(type.flags & (SimpleTypeFlags::unsigned_ | SimpleTypeFlags::explicitly_signed)) && !new_name.IsBuiltInTypeName(IsBuiltInTypeNameFlags::allow_integral))
+            if (bool(type.flags & (SimpleTypeFlags::unsigned_ | SimpleTypeFlags::explicitly_signed)) && !new_name.IsBuiltInTypeName(IsBuiltInTypeFlags::allow_integral))
                 return false;
             // Similarly, `_Complex`/`_Imaginary` plus something other than a floating-point type.
-            if (bool(type.flags & (SimpleTypeFlags::c_complex | SimpleTypeFlags::c_imaginary)) && !new_name.IsBuiltInTypeName(IsBuiltInTypeNameFlags::allow_floating_point))
+            if (bool(type.flags & (SimpleTypeFlags::c_complex | SimpleTypeFlags::c_imaginary)) && !new_name.IsBuiltInTypeName(IsBuiltInTypeFlags::allow_floating_point))
                 return false;
 
             if (type.prefix == SimpleTypePrefix::typename_)
