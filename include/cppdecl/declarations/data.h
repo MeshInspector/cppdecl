@@ -536,6 +536,9 @@ namespace cppdecl
         // Returns true if this type is const-qualified, or a reference, or a (possibly n-dimensional) array with const element type (at the top level by default, if `i == 0`).
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsEffectivelyConst(std::size_t i = 0) const;
 
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsLvalueReference(std::size_t i = 0) const;
+        [[nodiscard]] CPPDECL_CONSTEXPR bool IsRvalueReference(std::size_t i = 0) const;
+
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInType(IsBuiltInTypeFlags flags = IsBuiltInTypeFlags::allow_all) const;
 
         // Returns the qualifiers of the `i`th modifier in `modifiers`, or those of `simple_type` if `i == modifiers.size()`.
@@ -1828,9 +1831,19 @@ namespace cppdecl
     CPPDECL_CONSTEXPR bool Type::IsEffectivelyConst(std::size_t i) const
     {
         // Skip all array extents.
-        while (Is<cppdecl::Array>(i))
+        while (Is<Array>(i))
             i++;
         return IsConst(i) || Is<Reference>(i);
+    }
+
+    CPPDECL_CONSTEXPR bool Type::IsLvalueReference(std::size_t i) const
+    {
+        return Is<Reference>(i) && As<Reference>(i)->kind == RefQualifier::lvalue;
+    }
+
+    CPPDECL_CONSTEXPR bool Type::IsRvalueReference(std::size_t i) const
+    {
+        return Is<Reference>(i) && As<Reference>(i)->kind == RefQualifier::rvalue;
     }
 
     CPPDECL_CONSTEXPR bool Type::IsBuiltInType(IsBuiltInTypeFlags flags) const
