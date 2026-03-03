@@ -531,6 +531,16 @@ namespace cppdecl
         template <typename T> [[nodiscard]] CPPDECL_CONSTEXPR       T *As(std::size_t i = 0);
         template <typename T> [[nodiscard]] CPPDECL_CONSTEXPR const T *As(std::size_t i = 0) const;
 
+        // Count how many modifiers satisfy `Is<T>()`, starting from the `i`th one. E.g. `Count<Array>()` returns the number of dimensions in an array.
+        template <typename T>
+        [[nodiscard]] CPPDECL_CONSTEXPR std::size_t CountModifiers(std::size_t i = 0) const
+        {
+            std::size_t ret = 0;
+            while (Is<T>(i++))
+                ret++;
+            return ret;
+        }
+
         // Returns true if this type is const-qualified (at the top level by default, if `i == 0`).
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsConst(std::size_t i = 0) const;
         // Returns true if this type is const-qualified, or a reference, or a (possibly n-dimensional) array with const element type (at the top level by default, if `i == 0`).
