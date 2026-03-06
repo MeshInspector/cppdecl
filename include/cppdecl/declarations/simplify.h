@@ -1914,12 +1914,17 @@ namespace cppdecl
         if (traits.ShouldAct(flags))
         {
             (void)target.template VisitEachComponent<QualifiedName, CvQualifiers, SimpleType, NumericLiteral>(
-                {},
+                // Should this use pre-order or post-order?
+                // With pre-order, we need to compare longer names,
+                //   but at the same time the simplification process needs to be done less times.
+                // But more importantly, this way we can handle DIFFERENT spellings of different template arguments that simplify to the same spelling.
+                // This looks desirable, therefore postorder it is.
+                VisitFlags::post_order,
                 Overload{
-                    [&](QualifiedName &name){traits.SimplifyQualifiedNameNonRecursively(flags, name); return false;},
-                    [&](CvQualifiers &quals){traits.SimplifyCvQualifiers(flags, quals); return false;},
-                    [&](SimpleType &quals){traits.SimplifySimpleTypeNonRecursively(flags, quals); return false;},
-                    [&](NumericLiteral &lit){traits.SimplifyNumericLiteral(flags, lit); return false;},
+                    [&](QualifiedName &name){traits.SimplifyQualifiedNameNonRecursively(flags, name); return VisitResult::recurse;},
+                    [&](CvQualifiers &quals){traits.SimplifyCvQualifiers(flags, quals); return VisitResult::recurse;},
+                    [&](SimpleType &quals){traits.SimplifySimpleTypeNonRecursively(flags, quals); return VisitResult::recurse;},
+                    [&](NumericLiteral &lit){traits.SimplifyNumericLiteral(flags, lit); return VisitResult::recurse;},
                 }
             );
         }
