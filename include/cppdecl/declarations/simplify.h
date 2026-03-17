@@ -545,6 +545,10 @@ namespace cppdecl
         // This is a low-level function, prefer `Simplify()`.
         CPPDECL_CONSTEXPR void SimplifyQualifiedNameNonRecursively(SimplifyFlags flags, QualifiedName &name)
         {
+            // Remove redundant `int`.
+            if (bool(flags & SimplifyFlags::bit_common_remove_redundant_int) && bool(name.flags & QualifiedNameFlags::redundant_int))
+                name.flags &= ~QualifiedNameFlags::redundant_int;
+
             // Rewrite `_Bool` as `bool`.
             if (bool(flags & SimplifyFlags::bit_c_normalize_bool) && name.AsSingleWord() == "_Bool")
             {
@@ -1876,9 +1880,6 @@ namespace cppdecl
             // Here we don't remove `signed` if `int` is implied.
             if (bool(flags & SimplifyFlags::bit_common_remove_redundant_signed) && bool(simple_type.flags & SimpleTypeFlags::explicitly_signed) && !simple_type.IsNonRedundantlySigned() && !bool(simple_type.flags & SimpleTypeFlags::implied_int))
                 simple_type.flags &= ~SimpleTypeFlags::explicitly_signed;
-
-            if (bool(flags & SimplifyFlags::bit_common_remove_redundant_int) && bool(simple_type.flags & SimpleTypeFlags::redundant_int))
-                simple_type.flags &= ~SimpleTypeFlags::redundant_int;
         }
 
         CPPDECL_CONSTEXPR void SimplifyNumericLiteral(SimplifyFlags flags, NumericLiteral &lit)

@@ -758,6 +758,13 @@ namespace cppdecl
             ret += ToCode(part, flags);
         }
 
+        if (bool(target.flags & QualifiedNameFlags::redundant_int))
+        {
+            if (!ret.empty())
+                ret += ' ';
+            ret += "int";
+        }
+
         return ret;
     }
 
@@ -775,6 +782,9 @@ namespace cppdecl
 
                 ret += ToString(part, flags);
             }
+
+            // Ignoring `reduant_int`, I don't it adds any useful information.
+
             return ret;
         }
         else if (bool(flags & ToStringFlags::debug))
@@ -792,7 +802,12 @@ namespace cppdecl
 
                 ret += ToString(part, flags);
             }
-            ret += "]}";
+            ret += "]";
+
+            if (bool(target.flags & QualifiedNameFlags::redundant_int))
+                ret += ",flags=[redundant_int]";
+
+            ret += "}";
             return ret;
         }
         else
@@ -818,6 +833,9 @@ namespace cppdecl
 
                     ret += ToString(part, flags);
                 }
+
+                if (bool(target.flags & QualifiedNameFlags::redundant_int))
+                    ret += " with explicit `int`";
             }
 
             return ret;
@@ -980,13 +998,6 @@ namespace cppdecl
                 ret += ToCode(target.name, flags);
             }
 
-            if (bool(target.flags & SimpleTypeFlags::redundant_int))
-            {
-                if (!ret.empty())
-                    ret += ' ';
-                ret += "int";
-            }
-
             // Don't need to handle `implied_int` here because that comes with the type being set to `"int"`.
         };
 
@@ -1036,10 +1047,6 @@ namespace cppdecl
                           case SimpleTypeFlags::explicitly_signed:
                             if (target.IsNonRedundantlySigned())
                                 ret += "signed_";
-                            continue;
-                          case SimpleTypeFlags::redundant_int:
-                            // We could handle this below separately, but we don't.
-                            // I don't think this would add any useful information.
                             continue;
                           case SimpleTypeFlags::implied_int:
                             // This does nothing.
@@ -1095,9 +1102,6 @@ namespace cppdecl
                             continue;
                           case SimpleTypeFlags::explicitly_signed:
                             ret += "explicitly_signed";
-                            continue;
-                          case SimpleTypeFlags::redundant_int:
-                            ret += "redundant_int";
                             continue;
                           case SimpleTypeFlags::implied_int:
                             ret += "implied_int";
@@ -1166,9 +1170,6 @@ namespace cppdecl
             }
 
             ret += ToString(target.name, flags);
-
-            if (bool(target.flags & SimpleTypeFlags::redundant_int))
-                ret += " with explicit `int`";
 
             if (target.prefix != SimpleTypePrefix{})
             {

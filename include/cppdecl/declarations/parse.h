@@ -205,6 +205,71 @@ namespace cppdecl
     }
 
 
+    // True on success, false if nothing to do, error if this looks illegal.
+    using TryAddPartResult = std::variant<bool, ParseError>;
+
+    enum class TryAddWordToNameFlags
+    {
+        no_replacing_empty_name = 1 << 0,
+    };
+    CPPDECL_FLAG_OPERATORS(TryAddWordToNameFlags)
+
+    enum class TryAddNameToTypeFlags
+    {
+        no_type_prefix = 1 << 0,
+    };
+    CPPDECL_FLAG_OPERATORS(TryAddNameToTypeFlags)
+
+    // Tries to modify this type by adding another name to it.
+    // This always succeeds if the existing name is empty (unless `flags` includes `no_replacing_empty_name`), and otherwise it only accepts things like adding `long` to another `long`.
+    [[nodiscard]] CPPDECL_CONSTEXPR TryAddPartResult TryAddWordToQualifiedName(QualifiedName &name, std::string_view word, TryAddWordToNameFlags flags)
+    {
+        if (word.empty())
+            return false;
+
+        if (!bool(flags & TryAddWordToNameFlags::no_replacing_empty_name) && name.IsEmpty())
+        {
+            name = QualifiedName::FromSingleWord(std::string(word));
+            return true;
+        }
+
+        const std::string_view existing_word = name.AsSingleWord();
+
+        // Combining together all the `[long [long]] [int]` bullshit:
+        // int + short, int + long  -> remove the `int`, keep the new spelling and set the flag.
+        if (existing_word == "int" && (word == "short" || word == "long"))
+        {
+            if (bool(name.flags & QualifiedNameFlags::redundant_int))
+                return ParseError{.message = "Repeated `int`."};
+            name.flags |= QualifiedNameFlags::redundant_int;
+            name.parts.front().var = std::string(word);
+            return true;
+        }
+        // short + int, long + int, long long + int  -> set the flag and ignore `int`
+        if (word == "int" && (existing_word == "short" || existing_word == "long" || existing_word == "long long"))
+        {
+            if (bool(name.flags & QualifiedNameFlags::redundant_int))
+                return ParseError{.message = "Repeated `int`."};
+            name.flags |= QualifiedNameFlags::redundant_int;
+            return true;
+        }
+        // long + long
+        if (word == "long" && existing_word == "long")
+        {
+            name.parts.front().var = "long long";
+            return true;
+        }
+        // long + double
+        if ((word == "long" && existing_word == "double") || (word == "double" && existing_word == "long"))
+        {
+            name.parts.front().var = "long double";
+            return true;
+        }
+
+        return false; // Don't know what this is.
+    }
+
+
     enum class ParseQualifiedNameFlags
     {
         // Only parse an unqualified name, stop at any `::` (including the leading one).
@@ -225,6 +290,10 @@ namespace cppdecl
 
         // Reject unspellable name parts: lambdas, unnamed structs/classes/unions/enums, anonymous namespaces.
         only_spellable_names = 1 << 5,
+
+        // Reject `long long` and such. Only the first word will be consumed.
+        // This is primarily for internal use. We pass this when calling `ParseQualifiedName()` from other parsing functions.
+        no_multiword_types = 1 << 6,
     };
     CPPDECL_FLAG_OPERATORS(ParseQualifiedNameFlags)
 
@@ -448,7 +517,7 @@ namespace cppdecl
                     }
                 }
 
-                // Did we successfully parsed an unspellable name?
+                // Did we successfully parse an unspellable name?
                 if (!unsp_name.empty())
                 {
                     first = false;
@@ -501,6 +570,8 @@ namespace cppdecl
                     s.remove_prefix(std::size_t(cur - s.data()));
                     TrimLeadingWhitespace(s);
 
+                    bool maybe_multiword_type = false;
+
                     if (first)
                     {
                         first = false;
@@ -513,6 +584,8 @@ namespace cppdecl
                             }
 
                             stop_on_this_iteration = true;
+                            if (!bool(flags & ParseQualifiedNameFlags::no_multiword_types))
+                                maybe_multiword_type = true;
                         }
 
                         if (IsLiteralConstantKeyword(new_word))
@@ -544,11 +617,10 @@ namespace cppdecl
                         }
                     }
 
-
                     UnqualifiedName new_unqual_part;
 
-                    // Is this something weird?
-                    if (new_word == "operator")
+                    // A special name starting from `operator`?
+                    if (!maybe_multiword_type && new_word == "operator")
                     {
                         // The whitespace was already stripped at this point.
 
@@ -636,12 +708,52 @@ namespace cppdecl
                     input = s;
 
                     // Consume the template arguments, if any.
-                    auto arglist_result = ParseTemplateArgumentList(input);
-                    if (auto error = std::get_if<ParseError>(&arglist_result))
-                        return ret = *error, ret;
-                    new_unqual_part.template_args = std::move(std::get<std::optional<TemplateArgumentList>>(arglist_result));
+                    if (!maybe_multiword_type)
+                    {
+                        auto arglist_result = ParseTemplateArgumentList(input);
+                        if (auto error = std::get_if<ParseError>(&arglist_result))
+                            return ret = *error, ret;
+                        new_unqual_part.template_args = std::move(std::get<std::optional<TemplateArgumentList>>(arglist_result));
+                    }
 
                     ret_name.parts.push_back(std::move(new_unqual_part));
+
+                    // Try to consume additional parts of a type name, e.g. for `long long`
+                    if (maybe_multiword_type)
+                    {
+                        while (true)
+                        {
+                            if (input.empty() || !IsNonDigitIdentifierChar(input.front()))
+                                break;
+
+                            s = input;
+
+                            std::string_view new_word(s.data(), 0);
+
+                            do
+                            {
+                                new_word = {new_word.data(), new_word.size() + 1}; // Grow `new_word` by 1.
+                                s.remove_prefix(1);
+                            }
+                            while (!s.empty() && IsIdentifierChar(s.front()));
+
+                            TrimLeadingWhitespace(s);
+
+                            auto add_result = TryAddWordToQualifiedName(ret_name, new_word, {});
+                            if (auto error = std::get_if<ParseError>(&add_result))
+                                return ret = *error, ret;
+
+                            if (std::get<bool>(add_result))
+                            {
+                                // Added successfully.
+                                input = s;
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                    }
 
                     s = input;
                 }
@@ -717,27 +829,17 @@ namespace cppdecl
     }
 
 
-    // True on success, false if nothing to do, error if this looks illegal.
-    using TryAddNameToTypeResult = std::variant<bool, ParseError>;
-
-    enum class TryAddNameToTypeFlags
-    {
-        no_type_prefix = 1 << 0,
-    };
-    CPPDECL_FLAG_OPERATORS(TryAddNameToTypeFlags)
-
     // Tries to modify this type by adding another name to it.
-    // This always succeeds if the type is empty, and otherwise it only accepts things like
+    // This always succeeds if the existing type is empty, and otherwise it only accepts things like
     //   adding `long` to another `long`, or `unsigned` plus something else, etc.
     // NOTE: This does nothing if `new_name` is empty, and in that case you should probably stop whatever you're doing to avoid infinite loops.
     template <typename T> requires std::is_same_v<std::remove_cvref_t<T>, QualifiedName>
-    [[nodiscard]] CPPDECL_CONSTEXPR TryAddNameToTypeResult TryAddNameToSimpleType(SimpleType &type, /*QualifiedName*/ T &&new_name, TryAddNameToTypeFlags flags)
+    [[nodiscard]] CPPDECL_CONSTEXPR TryAddPartResult TryAddNameToSimpleType(SimpleType &type, /*QualifiedName*/ T &&new_name, TryAddNameToTypeFlags flags)
     {
         if (new_name.IsEmpty())
             return false; // The name is empty, nothing to do.
 
         const std::string_view word = new_name.AsSingleWord();
-        const std::string_view existing_word = type.name.AsSingleWord();
 
         if (word == "const")
         {
@@ -825,36 +927,15 @@ namespace cppdecl
             type.prefix = new_prefix;
             return true;
         }
-        // Combining together all the `[long [long]] [int]` bullshit:
-        // int + short, int + long  -> remove the `int`, keep the new spelling and set the flag.
-        if (existing_word == "int" && (word == "short" || word == "long"))
-        {
-            if (bool(type.flags & SimpleTypeFlags::redundant_int))
-                return ParseError{.message = "Repeated `int`."};
-            type.flags |= SimpleTypeFlags::redundant_int;
-            type.name.parts.front().var = std::string(word);
-            return true;
+
+        { // Try propagating to `TryAddWordToQualifiedName()`.
+            auto result = TryAddWordToQualifiedName(type.name, word, TryAddWordToNameFlags::no_replacing_empty_name);
+            if (auto error = std::get_if<ParseError>(&result))
+                return *error;
+            if (std::get<bool>(result))
+                return true;
         }
-        // short + int, long + int, long long + int  -> set the flag and ignore `int`
-        if (word == "int" && (existing_word == "short" || existing_word == "long" || existing_word == "long long"))
-        {
-            if (bool(type.flags & SimpleTypeFlags::redundant_int))
-                return ParseError{.message = "Repeated `int`."};
-            type.flags |= SimpleTypeFlags::redundant_int;
-            return true;
-        }
-        // long + long
-        if (word == "long" && existing_word == "long")
-        {
-            type.name.parts.front().var = "long long";
-            return true;
-        }
-        // long + double
-        if ((word == "long" && existing_word == "double") || (word == "double" && existing_word == "long"))
-        {
-            type.name.parts.front().var = "long double";
-            return true;
-        }
+
         // `_Complex`/`_Imaginary` + `long`, which then is expected to be followed by a `double`. This has to be a special case, since `long` is otherwise an integral type.
         if (word == "long" && bool(type.flags & (SimpleTypeFlags::c_complex | SimpleTypeFlags::c_imaginary)))
         {
@@ -940,6 +1021,7 @@ namespace cppdecl
         SimpleType &ret_type = std::get<SimpleType>(ret);
 
         const ParseQualifiedNameFlags qual_name_flags =
+            ParseQualifiedNameFlags::no_multiword_types |
             ParseQualifiedNameFlags::only_valid_types * !bool(flags & ParseSimpleTypeFlags::allow_arbitrary_names) |
             ParseQualifiedNameFlags::only_unqualified * bool(flags & ParseSimpleTypeFlags::only_unqualified) |
             ParseQualifiedNameFlags::allow_builtin_names * bool(flags & ParseSimpleTypeFlags::allow_arbitrary_names);
@@ -1890,7 +1972,7 @@ namespace cppdecl
                 TrimLeadingWhitespace(input);
 
                 const auto input_before_parse = input;
-                ParseQualifiedNameResult result = ParseQualifiedName(input, ParseQualifiedNameFlags::only_valid_types);
+                ParseQualifiedNameResult result = ParseQualifiedName(input, ParseQualifiedNameFlags::only_valid_types | ParseQualifiedNameFlags::no_multiword_types);
                 if (auto error = std::get_if<ParseError>(&result))
                     return ret = *error, ret;
 

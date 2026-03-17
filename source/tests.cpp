@@ -355,14 +355,23 @@ int main()
     CheckParseFail("",                                         m_any | cppdecl::ParseDeclFlags::force_non_empty_return_type, 0, "Expected a type.");
     CheckParseFail("  ",                                       m_any | cppdecl::ParseDeclFlags::force_non_empty_return_type, 2, "Expected a type.");
     // Explicit `int` flag.
-    CheckParseSuccess("long int",                              m_any, R"({type="{attrs=[],flags=[redundant_int],quals=[],name={global_scope=false,parts=[{name="long"}]}}",name="{global_scope=false,parts=[]}"})");
-    CheckParseSuccess("int long",                              m_any, R"({type="{attrs=[],flags=[redundant_int],quals=[],name={global_scope=false,parts=[{name="long"}]}}",name="{global_scope=false,parts=[]}"})");
-    CheckParseSuccess("long long int",                         m_any, R"({type="{attrs=[],flags=[redundant_int],quals=[],name={global_scope=false,parts=[{name="long long"}]}}",name="{global_scope=false,parts=[]}"})");
-    CheckParseSuccess("long int long",                         m_any, R"({type="{attrs=[],flags=[redundant_int],quals=[],name={global_scope=false,parts=[{name="long long"}]}}",name="{global_scope=false,parts=[]}"})");
-    CheckParseSuccess("int long long",                         m_any, R"({type="{attrs=[],flags=[redundant_int],quals=[],name={global_scope=false,parts=[{name="long long"}]}}",name="{global_scope=false,parts=[]}"})");
+    CheckParseSuccess("long int",                              m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="long"}],flags=[redundant_int]}}",name="{global_scope=false,parts=[]}"})");
+    CheckParseSuccess("int long",                              m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="long"}],flags=[redundant_int]}}",name="{global_scope=false,parts=[]}"})");
+    CheckParseSuccess("long long int",                         m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="long long"}],flags=[redundant_int]}}",name="{global_scope=false,parts=[]}"})");
+    CheckParseSuccess("long int long",                         m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="long long"}],flags=[redundant_int]}}",name="{global_scope=false,parts=[]}"})");
+    CheckParseSuccess("int long long",                         m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="long long"}],flags=[redundant_int]}}",name="{global_scope=false,parts=[]}"})");
+    CheckParseSuccess("long const int long",                   m_any, R"({type="{attrs=[],flags=[],quals=[const],name={global_scope=false,parts=[{name="long long"}],flags=[redundant_int]}}",name="{global_scope=false,parts=[]}"})");
     // long double
     CheckParseSuccess("long double",                           m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="long double"}]}}",name="{global_scope=false,parts=[]}"})");
     CheckParseSuccess("double long",                           m_any, R"({type="{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="long double"}]}}",name="{global_scope=false,parts=[]}"})");
+
+    // While we're at it, check that `long long` and other combinations parse as qualified names too.
+    CheckActualEqualsExpected("", cppdecl::ToString(cppdecl::ParseQualifiedName_Simple("long long"), {}), "`long long`");
+    CheckActualEqualsExpected("", cppdecl::ToString(cppdecl::ParseQualifiedName_Simple("long long int"), {}), "`long long` with explicit `int`");
+    CheckActualEqualsExpected("", cppdecl::ToString(cppdecl::ParseQualifiedName_Simple("long int long"), {}), "`long long` with explicit `int`");
+    CheckActualEqualsExpected("", cppdecl::ToString(cppdecl::ParseQualifiedName_Simple("int long long"), {}), "`long long` with explicit `int`");
+    CheckActualEqualsExpected("", cppdecl::ToString(cppdecl::ParseQualifiedName_Simple("long double"), {}), "`long double`");
+    CheckActualEqualsExpected("", cppdecl::ToString(cppdecl::ParseQualifiedName_Simple("double long"), {}), "`long double`");
 
     // Function types.
     CheckParseSuccess("int()",                                 m_any, R"({type="a function taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="int"}]}}",name="{global_scope=false,parts=[]}"})");

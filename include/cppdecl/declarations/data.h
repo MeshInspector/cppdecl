@@ -93,6 +93,16 @@ namespace cppdecl
         rvalue,
     };
 
+    // Additional information about a qualified name.
+    enum class QualifiedNameFlags
+    {
+        // Explicitly `... int`, where the `int` is unnecessary. It's removed from the output and only the flag is kept.
+        // E.g. `long int` and `int long`.
+        // Note that we don't set this for `signed int` and `unsigned int` for sanity.
+        redundant_int = 1 << 0,
+    };
+    CPPDECL_FLAG_OPERATORS(QualifiedNameFlags)
+
     // Additional information about a type.
     enum class SimpleTypeFlags
     {
@@ -101,23 +111,19 @@ namespace cppdecl
         // Explicitly `signed`. Mutually exclusive with `unsigned_`. This is usually redundant, unless this is a `char`.
         explicitly_signed = 1 << 1,
 
-        // Explicitly `... int`, where the `int` is unnecessary. It's removed from the output and only the flag is kept.
-        // E.g. `long int` and `int long`.
-        // Note that we don't set this for `signed int` and `unsigned int` for sanity.
-        redundant_int = 1 << 2,
-
         // This will also have the type name set to `"int"`. We do this when getting `unsigned` and `signed` without the `int`.
         // We don't do this for `long` and such. This is intentionally inconsistent, for sanity.
-        // This is mutally exclusive with `redundant_int`.
+        // This is mutally exclusive with `QualifiedNameFlags::redundant_int`.
         // This implies `unsigned_` or `explicitly_signed`.
-        implied_int = 1 << 3,
+        // Note that signedness is in the `SimpleType` and not in `QualifiedName`.
+        implied_int = 1 << 2,
 
         // This is a C `_Complex` type.
-        c_complex = 1 << 4,
+        c_complex = 1 << 3,
         // This is a C `_Imaginary` type.
-        c_imaginary = 1 << 5,
+        c_imaginary = 1 << 4,
         // This is when `_Complex` / `_Imaginary` gets implicit `double`.
-        c_implied_double = 1 << 6,
+        c_implied_double = 1 << 5,
     };
     CPPDECL_FLAG_OPERATORS(SimpleTypeFlags)
 
@@ -238,6 +244,7 @@ namespace cppdecl
     {
         std::vector<UnqualifiedName> parts;
         bool force_global_scope = false; // True if this has a leading `::`.
+        QualifiedNameFlags flags{};
 
         // This accepts only single-word type names without `::` or any other punctuation. Accepts `long long` and `long double`, `double long`, but rejects signedness and such.
         [[nodiscard]] static CPPDECL_CONSTEXPR QualifiedName FromSingleWord(std::string part);
