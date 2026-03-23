@@ -176,6 +176,8 @@ There are simple parsing functions in `<cppdecl/declarations/parse_simple.h>`, t
 
 If you don't want exceptions, use the lower-level functions from `<cppdecl/declarations/parse.h>`. Those don't error if some part of the string was left unparsed, allowing you to chain the calls. This header also has functions to parse less common entities (such as lone template argument lists).
 
+There are also classes that call the `..._Simple()` functions and memoize the results: `cppdecl::QualifiedNameParser`, `cppdecl::TypeParser`, `cppdecl::DeclParser`.
+
 ### How do you convert a type/etc back to a string?
 
 Most types in the library (`cppdecl::Type`, `Decl`, `QualifiedName`, etc) support following functions:

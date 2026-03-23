@@ -2020,4 +2020,12 @@ int main()
     {
         CheckActualEqualsExpected("", e.what(), "cppdecl: Parse error in qualified name `std::vector<int` at position 11: Unterminated template argument list.");
     }
+
+
+    // Simple parsing classes that memoize results:
+
+    // Just poke them to make sure they instantiate correctly.
+    (void)cppdecl::TypeParser{}("int");
+    (void)cppdecl::DeclParser{}("int x");
+    (void)cppdecl::QualifiedNameParser{}("A::B");
 }

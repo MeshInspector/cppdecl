@@ -5,6 +5,9 @@
 #include "cppdecl/misc/string_helpers.h"
 
 #include <stdexcept>
+#include <string_view>
+#include <string>
+#include <unordered_map>
 
 // Some simple parsing functions that throw on failure, and throw if some part of the string was left unparsed.
 // Those also don't support all of the entities, only the most popular ones.
@@ -33,6 +36,7 @@ namespace cppdecl
 
     // Note that the default value of `flags`, `ParseDeclFlags::accept_everything`, will happily accept unnamed declarations (i.e. just types).
     // If that's not what's desired, pass either `accept_all_named` or `accept_unqualified_named`.
+    // Note, the default flags must be synced with `DeclParser` below.
     [[nodiscard]] CPPDECL_CONSTEXPR MaybeAmbiguousDecl ParseDecl_Simple(std::string_view input, ParseDeclFlags flags = ParseDeclFlags::accept_everything)
     {
         const std::string_view input_before_parse = input;
@@ -71,4 +75,86 @@ namespace cppdecl
 
         return std::get<QualifiedName>(ret);
     }
+
+
+    // This is a CRTP base.
+    template <typename Derived, typename T>
+    class BasicParser
+    {
+        std::unordered_map<std::string, T> cache;
+
+      public:
+        [[nodiscard]] const T &operator()(const std::string &str)
+        {
+            auto [iter, is_new] = cache.try_emplace(str); // Sadly this doesn't accept `std::string_view` out of the box.
+            if (is_new)
+            {
+                struct Guard
+                {
+                    BasicParser *self;
+                    decltype(iter) iter;
+
+                    ~Guard()
+                    {
+                        if (self)
+                            self->cache.erase(iter);
+                    }
+                };
+
+                Guard guard{this, iter};
+
+                iter->second = static_cast<Derived &>(*this).Parse(iter->first); // Using `iter->first` because `str` is moved-from at this point.
+
+                guard.self = nullptr; // Disarm the guard.
+            }
+
+            return iter->second;
+        }
+    };
+
+    // This calls `ParseType_Simple()` and memoizes the results.
+    class TypeParser : public BasicParser<TypeParser, Type>
+    {
+        ParseTypeFlags flags;
+
+        friend BasicParser<TypeParser, Type>;
+        Type Parse(std::string_view str)
+        {
+            return ParseType_Simple(str, flags);
+        }
+
+      public:
+        TypeParser(ParseTypeFlags flags = {}) : flags(flags) {}
+    };
+
+    // This calls `ParseDecl_Simple()` and memoizes the results.
+    class DeclParser : public BasicParser<DeclParser, MaybeAmbiguousDecl>
+    {
+        ParseDeclFlags flags;
+
+        friend BasicParser<DeclParser, MaybeAmbiguousDecl>;
+        MaybeAmbiguousDecl Parse(std::string_view str)
+        {
+            return ParseDecl_Simple(str, flags);
+        }
+
+      public:
+        // Note, the default flags must be synced with `ParseDecl_Simple()` above.
+        DeclParser(ParseDeclFlags flags = ParseDeclFlags::accept_everything) : flags(flags) {}
+    };
+
+    // This calls `ParseQualifiedName_Simple()` and memoizes the results.
+    class QualifiedNameParser : public BasicParser<QualifiedNameParser, QualifiedName>
+    {
+        ParseQualifiedNameFlags flags;
+
+        friend BasicParser<QualifiedNameParser, QualifiedName>;
+        QualifiedName Parse(std::string_view str)
+        {
+            return ParseQualifiedName_Simple(str, flags);
+        }
+
+      public:
+        QualifiedNameParser(ParseQualifiedNameFlags flags = {}) : flags(flags) {}
+    };
 }
