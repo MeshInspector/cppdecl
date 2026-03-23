@@ -587,6 +587,9 @@ namespace cppdecl
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsLvalueReference(std::size_t i = 0) const;
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsRvalueReference(std::size_t i = 0) const;
 
+        // Returns `none` if not a reference.
+        [[nodiscard]] CPPDECL_CONSTEXPR RefQualifier ReferenceKindIfAny(std::size_t i = 0) const;
+
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsBuiltInType(IsBuiltInTypeFlags flags = IsBuiltInTypeFlags::allow_all) const;
 
         // Returns the qualifiers of the `i`th modifier in `modifiers`, or those of `simple_type` if `i == modifiers.size()`.
@@ -1937,6 +1940,14 @@ namespace cppdecl
     CPPDECL_CONSTEXPR bool Type::IsRvalueReference(std::size_t i) const
     {
         return Is<Reference>(i) && As<Reference>(i)->kind == RefQualifier::rvalue;
+    }
+
+    CPPDECL_CONSTEXPR RefQualifier Type::ReferenceKindIfAny(std::size_t i) const
+    {
+        if (auto opt = As<Reference>(i))
+            return opt->kind;
+        else
+            return RefQualifier::none;
     }
 
     CPPDECL_CONSTEXPR bool Type::IsBuiltInType(IsBuiltInTypeFlags flags) const
