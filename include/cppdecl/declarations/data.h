@@ -613,6 +613,8 @@ namespace cppdecl
             if (qual == CvQualifiers{})
                 return *this; // Don't fail if `quals` is empty, even if this modifier doesn't support qualifiers,
             auto ret = GetQualifiersMut(i);
+            if (!ret && qual == CvQualifiers::const_ && IsEffectivelyConst(i))
+                return *this; // If we're just trying to add constness to something that is already effectively const, do nothing.
             assert(ret && "This modifier doesn't support cv-qualifiers.");
             if (ret)
                 *ret |= qual;
@@ -1963,6 +1965,9 @@ namespace cppdecl
 
     CPPDECL_CONSTEXPR CvQualifiers *Type::GetQualifiersMut(std::size_t i)
     {
+        while (Is<cppdecl::Array>(i))
+            i++;
+
         if (i == modifiers.size())
             return &simple_type.quals;
         else if (i < modifiers.size())
