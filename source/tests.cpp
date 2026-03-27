@@ -816,6 +816,11 @@ int main()
     CheckRoundtrip("unsigned int", m_any, "unsigned int", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_int);
     CheckRoundtrip("signed int", m_any, "signed int", {}, cppdecl::SimplifyFlags::bit_common_remove_redundant_int);
 
+    // Some random testcases we used to choke on.
+    CheckRoundtrip("int ::x", m_any, "int ::x");
+    CheckRoundtrip("std::optional<int> x", m_any, "std::optional<int> x");
+    CheckRoundtrip("std::optional<int> ::x", m_any, "std::optional<int>::x"); // This gets parsed as a single name.
+
     // Type prefixes.
     CheckRoundtrip("class A",    m_any, "class A");
     CheckRoundtrip("struct A",   m_any, "struct A");

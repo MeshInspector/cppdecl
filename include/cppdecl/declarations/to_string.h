@@ -2275,7 +2275,7 @@ namespace cppdecl
             std::string name_str = ToCode(target.name, flags);
 
             // Separating whitespace if needed.
-            if (!ret.empty() && !name_str.empty() && IsIdentifierChar(ret.back()) && IsIdentifierChar(name_str.front()))
+            if (!ret.empty() && !name_str.empty() && (ret.back() == '>' || IsIdentifierChar(ret.back())))
                 ret += ' ';
             ret += name_str;
 
