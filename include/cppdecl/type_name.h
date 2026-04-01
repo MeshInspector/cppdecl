@@ -49,10 +49,10 @@ namespace cppdecl
         template <typename T>
         [[nodiscard]] constexpr std::string_view RawPrettyFuncString()
         {
-            #ifndef _MSC_VER
-            return __PRETTY_FUNCTION__;
-            #else
+            #if defined(_MSC_VER) && !defined(__clang__) // Clang warns about `__FUNCSIG__`, so it's easier to just use `__PRETTY_FUNCTION__` for it.
             return __FUNCSIG__;
+            #else
+            return __PRETTY_FUNCTION__;
             #endif
         }
 
