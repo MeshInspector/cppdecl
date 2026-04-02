@@ -606,6 +606,9 @@ namespace cppdecl
                       CPPDECL_CONSTEXPR Type & RemoveModifier(std::size_t i = 0) &;
         [[nodiscard]] CPPDECL_CONSTEXPR Type &&RemoveModifier(std::size_t i = 0) &&;
 
+        template <typename M>               CPPDECL_CONSTEXPR Type & TryRemoveModifier(std::size_t i = 0) &;
+        template <typename M> [[nodiscard]] CPPDECL_CONSTEXPR Type &&TryRemoveModifier(std::size_t i = 0) &&;
+
         // Adds new cv-qualifiers. By default (if `i == 0`) acts on the top-level.
         // Asserts if the `i`th modifier doesn't support qualifiers (and `qual` isn't empty).
         CPPDECL_CONSTEXPR Type &AddQualifiers(CvQualifiers qual, std::size_t i = 0) &
@@ -1988,6 +1991,21 @@ namespace cppdecl
     CPPDECL_CONSTEXPR Type &&Type::RemoveModifier(std::size_t i) &&
     {
         RemoveModifier(i);
+        return std::move(*this);
+    }
+
+    template <typename M>
+    CPPDECL_CONSTEXPR Type &Type::TryRemoveModifier(std::size_t i) &
+    {
+        if (Is<M>(i))
+            RemoveModifier(i);
+        return *this;
+    }
+
+    template <typename M>
+    CPPDECL_CONSTEXPR Type &&Type::TryRemoveModifier(std::size_t i) &&
+    {
+        TryRemoveModifier<M>(i);
         return std::move(*this);
     }
 
