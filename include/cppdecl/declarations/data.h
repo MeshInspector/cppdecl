@@ -581,7 +581,7 @@ namespace cppdecl
 
         // Returns true if this type is const-qualified (at the top level by default, if `i == 0`).
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsConst(std::size_t i = 0) const;
-        // Returns true if this type is const-qualified, or a reference, or a (possibly n-dimensional) array with const element type (at the top level by default, if `i == 0`).
+        // Returns true if this type is const-qualified, or a reference.
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsEffectivelyConst(std::size_t i = 0) const;
 
         [[nodiscard]] CPPDECL_CONSTEXPR bool IsLvalueReference(std::size_t i = 0) const;
@@ -1931,10 +1931,7 @@ namespace cppdecl
 
     CPPDECL_CONSTEXPR bool Type::IsEffectivelyConst(std::size_t i) const
     {
-        // Skip all array extents.
-        while (Is<Array>(i))
-            i++;
-        return IsConst(i) || Is<Reference>(i);
+        return Is<Reference>(i) || IsConst(i);
     }
 
     CPPDECL_CONSTEXPR bool Type::IsLvalueReference(std::size_t i) const
