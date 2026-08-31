@@ -2531,7 +2531,28 @@ namespace cppdecl
                         if (ConsumeWord(input, "noexcept"))
                         {
                             TrimLeadingWhitespace(input);
-                            func.noexcept_ = true;
+                            if (!ConsumePunctuation(input, "("))
+                            {
+                                func.noexcept_ = true;
+                            }
+                            else
+                            {
+                                TrimLeadingWhitespace(input);
+
+                                if (ConsumeWord(input, "true"))
+                                    func.noexcept_ = true;
+                                else if (!ConsumeWord(input, "false"))
+                                {
+                                    if (input.starts_with(')'))
+                                        return ParseError{.message = "Expected `true` or `false` in noexcept expression."};
+                                    return ParseError{.message = "Only `true` and `false` noexcept expressions are supported."};
+                                }
+
+                                TrimLeadingWhitespace(input);
+                                if (!ConsumePunctuation(input, ")"))
+                                    return ParseError{.message = "Expected `)` after noexcept expression."};
+                                TrimLeadingWhitespace(input);
+                            }
                             // Not trimming trailing whitespace here, it's not strictly necessary.
                         }
 

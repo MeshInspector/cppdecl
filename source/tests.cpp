@@ -766,6 +766,21 @@ int main()
     CheckRoundtrip("unsigned",                                 m_any, "unsigned");
     CheckRoundtrip("void foo() const volatile __restrict && noexcept", m_any, "void foo() const volatile __restrict && noexcept");
     CheckRoundtrip("auto foo() const volatile __restrict & noexcept -> int", m_any, "auto foo() const volatile __restrict & noexcept -> int");
+    CheckRoundtrip("void() noexcept", m_type, "void() noexcept");
+    CheckRoundtrip("void() noexcept(true)", m_type, "void() noexcept");
+    CheckRoundtrip("void() noexcept(false)", m_type, "void()");
+    CheckRoundtrip("void() noexcept( true )", m_type, "void() noexcept");
+    CheckRoundtrip("void() noexcept ( true )", m_type, "void() noexcept");
+    CheckRoundtrip("auto() noexcept(true) -> int", m_any, "auto() noexcept -> int");
+    CheckRoundtrip("auto() noexcept(false) -> int", m_any, "auto() -> int");
+    CheckRoundtrip("void(*)(int) noexcept(true)", m_type, "void (*)(int) noexcept");
+    CheckRoundtrip("void(* const)(int) noexcept( false )", m_type, "void (*const)(int)");
+    CheckRoundtrip("void(absl::internal_any_invocable::FunctionToCall, absl::internal_any_invocable::TypeErasedState*, absl::internal_any_invocable::TypeErasedState*) noexcept(true)", m_type, "void(absl::internal_any_invocable::FunctionToCall, absl::internal_any_invocable::TypeErasedState *, absl::internal_any_invocable::TypeErasedState *) noexcept");
+    CheckParseFail("void() noexcept(", m_type, 16, "Only `true` and `false` noexcept expressions are supported.");
+    CheckParseFail("void() noexcept()", m_type, 16, "Expected `true` or `false` in noexcept expression.");
+    CheckParseFail("void() noexcept(true", m_type, 20, "Expected `)` after noexcept expression.");
+    CheckParseFail("void() noexcept(value)", m_type, 16, "Only `true` and `false` noexcept expressions are supported.");
+    CheckParseFail("void() noexcept(true && false)", m_type, 21, "Expected `)` after noexcept expression.");
     CheckRoundtrip("auto() -> auto(*)(int) -> void",           m_any, "auto() -> auto (*)(int) -> void");
     CheckRoundtrip("auto() -> auto(*)(int) -> void",           m_any, "void (*())(int)", cppdecl::ToCodeFlags::force_no_trailing_return_type);
     CheckRoundtrip("int::A::*",                                m_any, "int (::A::*)"); // We could serialize this to `int ::A::*`, but it's easier to always add the `(...)` when the class name starts with `::`.
