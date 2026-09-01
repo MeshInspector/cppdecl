@@ -1288,8 +1288,11 @@ namespace cppdecl
         CvQualifiers cv_quals{};
         RefQualifier ref_qual{};
 
-        // This is implicitly `false`, which is exactly what we want.
-        // Can't explicitly do `= false` because not all contents of `PseudoExpr` are defined at this point.
+        // This defaults to `false`.
+        // We can't do just `= false` because not all contents of `PseudoExpr` are defined at this point.
+        // Leaving this without initializer implicitly makes it `false`, but sadly makes Clang warn when omitting this field in aggregate initialization.
+        // Making a function that assigns to this doesn't seem to work either.
+        // No idea how to fix this, will just leave it alone for now.
         std::variant<bool, PseudoExpr> noexcept_; // = false
 
         // Uses trailing return type.
