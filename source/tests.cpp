@@ -1972,6 +1972,18 @@ int main()
     CheckActualEqualsExpected("", cppdecl::TypeName<int, cppdecl::TypeNameFlags::use_typeid | cppdecl::TypeNameFlags::no_demangle>(), "i");
     #endif
 
+    // Qualifiers in dynamic types.
+    CheckActualEqualsExpected("", cppdecl::TypeName<const int, cppdecl::TypeNameFlags::use_typeid>(), "const int");
+    CheckActualEqualsExpected("", cppdecl::TypeName<volatile int, cppdecl::TypeNameFlags::use_typeid>(), "volatile int");
+    CheckActualEqualsExpected("", cppdecl::TypeName<const volatile int, cppdecl::TypeNameFlags::use_typeid>(), "const volatile int");
+    CheckActualEqualsExpected("", cppdecl::TypeName<int &, cppdecl::TypeNameFlags::use_typeid>(), "int &");
+    CheckActualEqualsExpected("", cppdecl::TypeName<int &&, cppdecl::TypeNameFlags::use_typeid>(), "int &&");
+    CheckActualEqualsExpected("", cppdecl::TypeName<const int &, cppdecl::TypeNameFlags::use_typeid>(), "const int &");
+    CheckActualEqualsExpected("", cppdecl::TypeName<const int &&, cppdecl::TypeNameFlags::use_typeid>(), "const int &&");
+    #ifdef _MSC_VER
+    CheckActualEqualsExpected("", cppdecl::TypeName<__unaligned int, cppdecl::TypeNameFlags::use_typeid>(), "__unaligned int");
+    #endif
+
 
     // Simple parsing functions:
 

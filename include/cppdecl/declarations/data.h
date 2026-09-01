@@ -82,6 +82,9 @@ namespace cppdecl
         // E.g. `int *__unaligned` becomes `int *`, which is understandable, but `int *__unaligned *` also becomes `int **`, which is hella weird.
         // Instead of handling all that, we just treat it as a regular cv-qualifier.
         msvc_unaligned = 1 << 5,
+
+        // When adding new elements here, don't forget to add them to `cppdecl::detail::TypeName::cv_qualfiiers_for_type` in `type_name.h`.
+        // But only if they are allowed at the top level of a type, which can be checked experimentally.
     };
     CPPDECL_FLAG_OPERATORS(CvQualifiers)
 

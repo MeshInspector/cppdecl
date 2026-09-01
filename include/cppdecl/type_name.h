@@ -156,7 +156,8 @@ namespace cppdecl
     // This is a runtime subset of `TypeName()` defined below, so if your type is fixed at compile-time, prefer that function.
     // `use_typeid` in `flags` is useless here, it is always implied.
     // If `flags_simplify` are zero, they default to `native`. To actually avoid simplification, add `no_simplify` to `flags`.
-    [[nodiscard]] inline std::string TypeNameDynamic(std::type_index type, TypeNameFlags flags = {}, ToCodeFlags flags_to_code = {}, SimplifyFlags flags_simplify = {})
+    // `add_cv` and `add_ref` are added to the type after parsing. This can be useful since `std::type_index` can't store cvref by itself.
+    [[nodiscard]] inline std::string TypeNameDynamic(std::type_index type, TypeNameFlags flags = {}, ToCodeFlags flags_to_code = {}, SimplifyFlags flags_simplify = {}, CvQualifiers add_cv = {}, RefQualifier add_ref = {})
     {
         std::string ret = type.name();
         if (bool((flags & TypeNameFlags::no_demangle) == TypeNameFlags::no_demangle))
@@ -170,6 +171,10 @@ namespace cppdecl
 
         Type parsed_type = detail::TypeName::ParseTypeDynamic(ret);
 
+        parsed_type.AddQualifiers(add_cv);
+        if (add_ref != RefQualifier::none)
+            parsed_type.AddModifier(Reference{.kind = add_ref});
+
         if (!bool(flags & TypeNameFlags::no_simplify))
             (Simplify)(bool(flags_simplify) ? flags_simplify : SimplifyFlags::native, parsed_type);
 
@@ -178,12 +183,40 @@ namespace cppdecl
 
     namespace detail::TypeName
     {
+        template <typename T>
+        struct RefQualifierForType : std::integral_constant<RefQualifier, RefQualifier::none> {};
+        template <typename T>
+        struct RefQualifierForType<T &> : std::integral_constant<RefQualifier, RefQualifier::lvalue> {};
+        template <typename T>
+        struct RefQualifierForType<T &&> : std::integral_constant<RefQualifier, RefQualifier::rvalue> {};
+
+        template <typename T> struct CvQualifierConst : std::integral_constant<CvQualifiers, CvQualifiers{}> {};
+        template <typename T> struct CvQualifierConst<const T> : std::integral_constant<CvQualifiers, CvQualifiers::const_> {};
+
+        template <typename T> struct CvQualifierVolatile : std::integral_constant<CvQualifiers, CvQualifiers{}> {};
+        template <typename T> struct CvQualifierVolatile<volatile T> : std::integral_constant<CvQualifiers, CvQualifiers::volatile_> {};
+
+        #ifdef _MSC_VER
+        template <typename T> struct CvQualifierMsvcUnaligned : std::integral_constant<CvQualifiers, CvQualifiers{}> {};
+        template <typename T> struct CvQualifierMsvcUnaligned<__unaligned T> : std::integral_constant<CvQualifiers, CvQualifiers::msvc_unaligned> {};
+        #endif
+
+        // `__restrict`, `__ptr32`, and `__ptr64` can't appear at the top level, so we don't care about them.
+
+        template <typename T> constexpr CvQualifiers cv_qualfiiers_for_type =
+            CvQualifierConst<T>::value
+            | CvQualifierVolatile<T>::value
+            #ifdef _MSC_VER
+            | CvQualifierMsvcUnaligned<T>::value
+            #endif
+            ;
+
         // We need a separate function instead of doing this directly in `TypeName()`,
         //   because that function is `constexpr` (because it also supports pretty-func-based mode), and those can't have local `static` variables pre-C++23.
         template <typename T, TypeNameFlags Flags, ToCodeFlags Flags_ToCode, SimplifyFlags Flags_Simplify>
         const std::string &CachedDynamicName()
         {
-            static const std::string ret = (TypeNameDynamic)(typeid(T), Flags, Flags_ToCode, Flags_Simplify);
+            static const std::string ret = (TypeNameDynamic)(typeid(T), Flags, Flags_ToCode, Flags_Simplify, cv_qualfiiers_for_type<std::remove_reference_t<T>>, RefQualifierForType<T>::value);
             return ret;
         }
     }
