@@ -181,7 +181,7 @@ namespace cppdecl
         // We need a separate function instead of doing this directly in `TypeName()`,
         //   because that function is `constexpr` (because it also supports pretty-func-based mode), and those can't have local `static` variables pre-C++23.
         template <typename T, TypeNameFlags Flags, ToCodeFlags Flags_ToCode, SimplifyFlags Flags_Simplify>
-        static const std::string &CachedDynamicName()
+        const std::string &CachedDynamicName()
         {
             static const std::string ret = (TypeNameDynamic)(typeid(T), Flags, Flags_ToCode, Flags_Simplify);
             return ret;
