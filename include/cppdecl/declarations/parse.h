@@ -74,9 +74,6 @@ namespace cppdecl
     CPPDECL_FLAG_OPERATORS(ParsePseudoExprFlags)
 
     using ParsePseudoExprResult = std::variant<PseudoExpr, ParseError>;
-    // Parse an expression. Even though we call those expressions, it's a fairly loose collection of tokens.
-    // We continue parsing until we hit a comma or a closing bracket: `)`,`}`,`]`,`>`.
-    // Can return an empty expression.
     [[nodiscard]] CPPDECL_CONSTEXPR ParsePseudoExprResult ParsePseudoExpr(std::string_view &input, ParsePseudoExprFlags flags = {});
 
 
@@ -1338,6 +1335,7 @@ namespace cppdecl
     // Parse an expression. Even though we call those expressions, it's a fairly loose collection of tokens.
     // We continue parsing until we hit a comma or a closing bracket: `)`,`}`,`]`,`>`.
     // Can return an empty expression.
+    // Automatically skips leading whitespace.
     [[nodiscard]] CPPDECL_CONSTEXPR ParsePseudoExprResult ParsePseudoExpr(std::string_view &input, ParsePseudoExprFlags flags)
     {
         // Note that we don't propagate any `flags` when recursing.
@@ -2531,8 +2529,28 @@ namespace cppdecl
                         if (ConsumeWord(input, "noexcept"))
                         {
                             TrimLeadingWhitespace(input);
-                            func.noexcept_ = true;
-                            // Not trimming trailing whitespace here, it's not strictly necessary.
+
+                            if (ConsumePunctuation(input, "("))
+                            {
+                                auto expr_result = ParsePseudoExpr(input);
+                                if (auto error = std::get_if<ParseError>(&expr_result))
+                                    return *error;
+
+                                if (std::get<PseudoExpr>(expr_result).IsEmpty())
+                                    return ParseError{.message = "Expected `noexcept` condition."};
+                                func.noexcept_ = std::move(std::get<PseudoExpr>(expr_result));
+
+                                TrimLeadingWhitespace(input);
+
+                                if (!ConsumePunctuation(input, ")"))
+                                    return ParseError{.message = "Expected `)` after `noexcept` condition."};
+
+                                TrimLeadingWhitespace(input);
+                            }
+                            else
+                            {
+                                func.noexcept_ = true;
+                            }
                         }
 
                         // Trailing return type?

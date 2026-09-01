@@ -1038,6 +1038,9 @@ namespace cppdecl
             return tokens.empty();
         }
 
+        // If the expression is literally `true` or `false`, returns that boolean. Otherwise returns null.
+        [[nodiscard]] CPPDECL_CONSTEXPR std::optional<bool> AsBool() const;
+
         // Visit all instances of any of `C...` nested in this. `func` is `(auto &name) -> void`.
         template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitFlags flags, auto &&func);
         template <VisitableComponentType ...C> [[nodiscard]] CPPDECL_CONSTEXPR bool VisitEachComponent(VisitFlags flags, auto &&func) const
@@ -1282,7 +1285,9 @@ namespace cppdecl
         CvQualifiers cv_quals{};
         RefQualifier ref_qual{};
 
-        bool noexcept_ = false;
+        // This is implicitly `false`, which is exactly what we want.
+        // Can't explicitly do `= false` because not all contents of `PseudoExpr` are defined at this point.
+        std::variant<bool, PseudoExpr> noexcept_; // = false
 
         // Uses trailing return type.
         bool uses_trailing_return_type = false;
@@ -1296,6 +1301,16 @@ namespace cppdecl
         // This function has a trailing C-style variadic `...` parameter, which lacks the comma before it (illegal since C++26).
         // This can only be set if `c_style_variadic` is also set.
         bool c_style_variadic_without_comma = false;
+
+        // Check for noexcept-ness. Returns null if unsure, which happens when `noexcept(...)` uses an arbitrary expression.
+        // But we do recognize `noexcept(true)` and `noexcept(false)`.
+        [[nodiscard]] CPPDECL_CONSTEXPR std::optional<bool> IsNoexcept() const
+        {
+            return (std::visit(Overload{
+                [](bool elem){return std::optional<bool>(elem);},
+                [](const PseudoExpr &elem){return elem.AsBool();}
+            }, noexcept_));
+        }
 
         CPPDECL_EQUALITY_DECLARE(Function)
 
@@ -2072,6 +2087,23 @@ namespace cppdecl
     }
 
     CPPDECL_EQUALITY_DEFINE(PseudoExpr)
+
+    CPPDECL_CONSTEXPR std::optional<bool> PseudoExpr::AsBool() const
+    {
+        if (tokens.size() != 1)
+            return {}; // Unknown.
+
+        if (auto opt = std::get_if<SimpleType>(&tokens.front()))
+        {
+            auto word = opt->AsSingleWord();
+            if (word == "true")
+                return true;
+            if (word == "false")
+                return false;
+        }
+
+        return {}; // Unknown.
+    }
 
     template <VisitableComponentType ...C>
     CPPDECL_CONSTEXPR bool PseudoExpr::VisitEachComponent(VisitFlags flags, auto &&func)

@@ -1020,6 +1020,23 @@ int main()
     CheckTypeRoundtrip("auto (B, C) -> A", "(B, C) -> A", cppdecl::ToCodeFlags::lambda | cppdecl::ToCodeFlags::force_no_trailing_return_type);
 
 
+    // Conditional noexcept-ness.
+    CheckParseSuccess("void foo() noexcept(true)", m_any, "`foo`, a function (conditionally noexcept when [`true`]) taking no parameters, returning `void`", {});
+    CheckParseSuccess("void foo() noexcept(false)", m_any, "`foo`, a function (conditionally noexcept when [`false`]) taking no parameters, returning `void`", {});
+    CheckParseSuccess("void foo() noexcept(foo && bar)", m_any, "`foo`, a function (conditionally noexcept when [`foo`, punctuation `&&`, `bar`]) taking no parameters, returning `void`", {});
+    CheckParseSuccess("auto foo()  noexcept  (  foo  &&  bar  )  ->  blah", m_any, "`foo`, a function (conditionally noexcept when [`foo`, punctuation `&&`, `bar`]) taking no parameters, returning (via trailing return type) `blah`", {});
+    CheckParseSuccess("void foo() noexcept(true)", m_any, "void_func_noexcept_foo", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void foo() noexcept(false)", m_any, "void_func_foo", cppdecl::ToStringFlags::identifier);
+    CheckParseSuccess("void foo() noexcept(foo && bar)", m_any, "void_func_foo", cppdecl::ToStringFlags::identifier); // Just omit noexcept-ness from the name.
+    CheckParseSuccess("void foo() noexcept(true)", m_any, R"({type="a function (conditionally noexcept when [{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="true"}]}}]) taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{name="foo"}]}"})");
+    CheckParseSuccess("void foo() noexcept(false)", m_any, R"({type="a function (conditionally noexcept when [{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="false"}]}}]) taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{name="foo"}]}"})");
+    CheckParseSuccess("void foo() noexcept(foo && bar)", m_any, R"({type="a function (conditionally noexcept when [{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="foo"}]}},punct`&&`,{attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="bar"}]}}]) taking no parameters, returning {attrs=[],flags=[],quals=[],name={global_scope=false,parts=[{name="void"}]}}",name="{global_scope=false,parts=[{name="foo"}]}"})");
+    CheckParseFail("void foo() noexcept(  ", m_any, 22, "Expected `noexcept` condition.");
+    CheckParseFail("void foo() noexcept(  foo && bar  ", m_any, 34, "Expected `)` after `noexcept` condition.");
+    CheckParseFail("void foo() noexcept()", m_any, 20, "Expected `noexcept` condition.");
+    CheckParseFail("void foo() noexcept(  )", m_any, 22, "Expected `noexcept` condition.");
+
+
     // --- Simplification:
 
     // libstdc++-style version namespace:

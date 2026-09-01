@@ -2807,8 +2807,20 @@ namespace cppdecl
             ret += RefQualifierToString(target.ref_qual);
         }
 
-        if (target.noexcept_)
-            ret += " noexcept";
+        std::visit(Overload{
+            [&](bool elem)
+            {
+                if (elem)
+                    ret += " noexcept";
+            },
+            [&](const PseudoExpr &elem)
+            {
+                // Conditional noexcept-ness.
+                ret += " noexcept(";
+                ret += ToCode(elem, flags);
+                ret += ')';
+            }
+        }, target.noexcept_);
 
         if (target.uses_trailing_return_type && !bool(flags & ToCodeFlags::force_no_trailing_return_type))
             ret += " -> "; // The caller must add the type after this.
@@ -2855,7 +2867,8 @@ namespace cppdecl
                 break;
             }
 
-            if (target.noexcept_)
+            // Add `_noexcept` if this is unconditionally noexcept. Ignore conditional noexcept-ness.
+            if (auto opt = target.IsNoexcept(); opt && *opt)
                 ret += "_noexcept";
 
             return ret;
@@ -2900,11 +2913,23 @@ namespace cppdecl
             }
         }
 
-        if (target.noexcept_)
-        {
-            AddDetail();
-            ret += "noexcept";
-        }
+        std::visit(Overload{
+            [&](bool elem)
+            {
+                if (elem)
+                {
+                    AddDetail();
+                    ret += "noexcept";
+                }
+            },
+            [&](const PseudoExpr &elem)
+            {
+                // Conditional noexcept-ness.
+                AddDetail();
+                ret += "conditionally noexcept when ";
+                ret += ToString(elem, flags); // This adds its own `[...]` brackets.
+            }
+        }, target.noexcept_);
 
         if (parens)
             ret += ") ";
