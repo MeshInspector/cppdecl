@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+<link href='./favicon.svg' rel='icon' type='image/svg+xml'>
+<link href='./favicon.svg' rel='shortcut icon' type='image/svg+xml'>
+-->
+<title>cppdecl</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="header" class="header">
+  cppdecl
+</div>
+<div id="main" >
+    <div id="mangledDiv">
+        <form class="mangling_form" id="mangling_form">
+    <label for="mangled">mangled name:</label>
+<input type="text" maxLength="40" size="40" id="mangled" name="mangled" >
+<button type="button" id="demangleButton" onclick="demangle_text(document.getElementById('mangled').value)">demangle</button>
+</form>
+</div>
+<div id="demangledDiv">
+    <textarea readonly rows="4" cols="40" id="demangled" name="demangled">
+</textarea>
+</div>
+
+<script >
+    var is_emscripten_initialized = 0;
+    var pending_demangle=null;
+    var darkmode = 0;
+    document.addEventListener('DOMContentLoaded', (event) => {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('darkmode');
+        darkmode = 1;
+    } else {
+        document.body.classList.remove('darkmode');
+        darkmode = 0;
+    }
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+    if (event.matches) {
+        document.body.classList.add('darkmode');
+        darkmode = 1;
+    } else {
+        document.body.classList.remove('darkmode');
+        darkmode = 0;
+    }
+    
+});
+
+    window.addEventListener('load', function() {
+        let mangling_form = document.getElementById('mangling_form');
+        mangling_form.reset();
+        document.getElementById('demangled').value = '';
+        
+    });
+    const urlParams = new URLSearchParams(window.location.search);
+    const mangled = urlParams.get('mangled');
+    
+    if (mangled) {
+  
+        if (is_emscripten_initialized == 1) {
+            document.getElementById('mangled').value = mangled;
+            parse_text(mangled);
+        } else {
+            pending_demangle = mangled;
+        }
+        
+    }
+
+});
+
+
+
+function parse_text(mangled) {
+    
+    console.log("parse_text", mangled);
+    const mangledLength = lengthBytesUTF8(mangled) + 1;
+    const mangledPtr = _malloc(mangledLength);
+    stringToUTF8(mangled, mangledPtr, mangledLength);
+
+    Module.parseText(mangledPtr, mangledLength - 1);
+    _free(mangledPtr);
+}
+
+</script>
+{{{ SCRIPT }}}
+
+</body>
+</html>
